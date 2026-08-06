@@ -22,3 +22,4 @@ coverage.xml
 config/*
 !config/configuration.yaml
 .venv*
+.DS_Store
