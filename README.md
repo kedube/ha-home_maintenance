@@ -11,6 +11,7 @@ Originally created by [@TJPoorman](https://github.com/TJPoorman/home_maintenance
 
 - [Installation](#installation)
 - [Configuration](#configuration)
+  - [Options](#options)
 - [Using the Panel](#using-the-panel)
   - [Trigger types](#trigger-types)
   - [Optional task fields](#optional-task-fields)
@@ -37,19 +38,40 @@ Originally created by [@TJPoorman](https://github.com/TJPoorman/home_maintenance
 5. Search for **Home Maintenance** in HACS, open it, and click **Download**.
 6. Restart Home Assistant.
 
+After restart, add the integration from Home Assistant:
+
+[![Open your Home Assistant instance and start setting up a new Home Maintenance integration instance.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=home_maintenance)
+
 ### Method 2: Manual installation
 
 1. Download `home_maintenance.zip` from the [latest release](https://github.com/kedube/ha-maintenance_tracker/releases) and extract it into `config/custom_components/home_maintenance`.
 2. Restart Home Assistant.
+3. Add the integration from **Settings → Devices & Services → Add Integration**, searching for **Home Maintenance** — or use the badge above.
 
-After restart, go to **Settings → Devices & Services**, click **Add Integration**, and search for **Home Maintenance**. Once added, the **Home Maintenance** panel appears in the sidebar.
+Once added, the **Home Maintenance** panel appears in the sidebar.
 
 ## Configuration
 
-Options are set when adding the integration and can be changed later via **Configure** on the integration entry:
+Setup asks for two options; both can be changed later without removing the integration:
 
-- **Admin only** — restrict the sidebar panel to admin users (default: on).
-- **Sidebar title** — the name shown in the sidebar (default: *Home Maintenance*).
+- **Admin only** — restrict the sidebar panel to admin users (default: **on**). Non-admin users don't see the panel, but task entities remain visible to everyone.
+- **Sidebar title** — the name shown for the panel in the sidebar (default: *Home Maintenance*).
+
+Only a **single instance** of the integration can be added — all tasks live under that one entry.
+
+### Options
+
+To change these settings after setup:
+
+1. Go to **Settings → Devices & Services**.
+2. On the **Integrations** tab, find the **Home Maintenance** card (or click the badge below to jump straight there).
+3. Click **Configure** on the Home Maintenance entry, adjust the options, and click **Submit**.
+
+[![Open your Home Assistant instance and show the Home Maintenance integration.](https://my.home-assistant.io/badges/integration.svg)](https://my.home-assistant.io/redirect/integration/?domain=home_maintenance)
+
+Submitting reloads the integration automatically, so changes — including a new sidebar title — take effect without restarting Home Assistant.
+
+> 💡 **Configure vs. Add.** Use **Configure** (the button on the *existing* entry) to change these options. The **Add integration** flow is only for the initial setup — a second entry can't be added.
 
 ## Using the Panel
 
