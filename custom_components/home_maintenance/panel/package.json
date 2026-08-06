@@ -11,15 +11,13 @@
   "author": "TJPoorman",
   "license": "ISC",
   "devDependencies": {
-    "esbuild": "^0.25.5",
-    "lit": "^3.3.0",
-    "typescript": "^5.8.3"
+    "esbuild": "0.25.12",
+    "typescript": "5.9.3"
   },
   "dependencies": {
-    "custom-card-helpers": "^1.9.0",
-    "@material/mwc-select": "latest",
-    "@material/mwc-list": "latest",
+    "lit": "3.3.3",
+    "custom-card-helpers": "1.9.0",
     "@mdi/js": "7.4.47",
-    "@mdi/svg": "7.4.47"
+    "intl-messageformat": "9.13.0"
   }
 }

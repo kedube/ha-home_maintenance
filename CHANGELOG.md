@@ -1,0 +1,50 @@
+# Changelog
+
+Notable changes to the Home Maintenance integration. The Unreleased section
+is rotated into a versioned section by the release workflow and becomes the
+Highlights block of the GitHub release notes.
+
+## Unreleased
+
+- Home Assistant 2026.3 compatibility: replaced removed `ha-md-menu` and
+  `mwc-button` components with `ha-dropdown`-based `hm-task-menu` and
+  `ha-button` (#122)
+- Count-based task triggers: tasks can fire after a number of events on a
+  monitored entity (#115)
+- Runtime-based task triggers: tasks can fire when a sensor value delta
+  crosses a threshold (#116)
+- Area support: tasks can be assigned to a Home Assistant area (#117)
+- Task description field in the add and edit dialogs (#101)
+- Task titles can be edited from the edit dialog (#100)
+- Trigger-type dropdown and all new form fields localized (English and German)
+- Performance: state listeners no longer copy every task on each state change,
+  storage writes are coalesced, and the task table no longer rebuilds on
+  unrelated state updates
+- Fixed: edit dialog validates count/runtime fields, description is no longer
+  dropped on edit, and count/runtime sensors now expose the description
+  attribute
+- CI overhaul (HACS, hassfest, ruff, pytest, panel build with bundle drift
+  check) and automatic releases with generated notes on every green build of
+  main
+- Architecture: the task store is now the single source of truth (entities no
+  longer keep task copies); per-trigger-type logic consolidated into one
+  strategy module shared by entities, API, and panel; entities are push-based
+  and time-based tasks flip due exactly at their due moment; count/runtime
+  sensors are watched with targeted state listeners
+- The panel updates live via a websocket subscription (changes from NFC scans,
+  services, and automations appear without a refresh), renders backend-computed
+  due/progress state, and is split into focused components
+- Task updates are validated against an explicit field whitelist server-side;
+  switching a task's trigger type resets the counter or captures a fresh
+  runtime baseline
+- German panel translations are now actually loaded
+- Test suite added (pytest-homeassistant-custom-component) covering triggers,
+  store, websocket API, watchers, services, entities, config flow, and the
+  release scripts, with an enforced 85% coverage gate, run on Python 3.13 and
+  3.14
+- Fixed: the options (Configure) dialog crashed on recent Home Assistant
+  versions that made OptionsFlow.config_entry read-only
+- CI hardening: all actions pinned to commit SHAs, a weekly non-blocking
+  "HA next" job runs the suite against the newest Home Assistant pre-release
+  for early breakage warning, and dependabot now maintains the panel's npm
+  dependencies with an automatic bundle rebuild on its PRs

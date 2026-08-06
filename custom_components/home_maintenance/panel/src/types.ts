@@ -15,6 +15,7 @@ export function getIntervalTypeLabels(lang: string): Record<IntervalType, string
 export interface IntegrationConfig {
     data: Record<string, any>;
     options: Record<string, any>;
+    version?: string;
 }
 
 export interface Label {
@@ -41,6 +42,8 @@ export interface EntityRegistryEntry {
     labels: string[];
 }
 
+export type TriggerType = "time" | "count" | "runtime";
+
 export interface Task {
     id: string;
     title: string;
@@ -49,4 +52,36 @@ export interface Task {
     last_performed: string;
     tag_id?: string;
     icon?: string;
+    trigger_type?: TriggerType;
+    count_entity_id?: string;
+    count_threshold?: number;
+    current_count?: number;
+    runtime_entity_id?: string;
+    runtime_threshold?: number;
+    runtime_baseline?: number;
+    area_id?: string | null;
+    description?: string | null;
+    // Computed by the backend (store.serialize) so the panel renders trigger
+    // state without reimplementing trigger semantics.
+    due?: boolean;
+    next_due?: string | null;
+    progress_current?: number | null;
+    progress_target?: number | null;
+}
+
+export interface TaskFormData {
+    title: string;
+    trigger_type: TriggerType;
+    interval_value: number | "";
+    interval_type: string;
+    last_performed: string;
+    icon: string;
+    label: string[];
+    tag: string;
+    count_entity_id: string;
+    count_threshold: number | "";
+    runtime_entity_id: string;
+    runtime_threshold: number | "";
+    area: string;
+    description: string;
 }

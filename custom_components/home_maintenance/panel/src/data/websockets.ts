@@ -51,7 +51,26 @@ export const updateTask = (hass: HomeAssistant, payload: Record<string, any>): P
         ...payload,
     })
 
+export const incrementCount = (hass: HomeAssistant, id: string): Promise<void> =>
+    hass.callWS({
+        type: 'home_maintenance/increment_count',
+        task_id: id,
+    })
+
+export const resetCount = (hass: HomeAssistant, id: string): Promise<void> =>
+    hass.callWS({
+        type: 'home_maintenance/reset_count',
+        task_id: id,
+    })
+
 export const getConfig = (hass: HomeAssistant): Promise<IntegrationConfig> =>
     hass.callWS({
         type: 'home_maintenance/get_config',
     })
+export const subscribeUpdates = (
+    hass: HomeAssistant,
+    onChange: () => void,
+): Promise<() => Promise<void>> =>
+    (hass.connection as any).subscribeMessage(onChange, {
+        type: 'home_maintenance/subscribe_updates',
+    });

@@ -14,10 +14,12 @@ Github is used to host code, to track issues and feature requests, as well as ac
 Pull requests are the best way to propose changes to the codebase.
 
 1. Fork the repo and create your branch from `main`.
-2. If you've changed something, update the documentation.
-3. Make sure your code lints (using `scripts/lint`).
-4. Test you contribution.
-5. Issue that pull request!
+2. If you've changed something, update the documentation (including [docs/architecture.md](docs/architecture.md) if the design changed).
+3. Add a line describing your change under `## Unreleased` in [CHANGELOG.md](CHANGELOG.md) — it becomes part of the next release's notes.
+4. If you changed the panel sources (`custom_components/home_maintenance/panel/src/`), rebuild the committed bundle: `cd custom_components/home_maintenance/panel && npm ci && npm run build`. CI fails if the committed bundle drifts from the sources.
+5. Make sure your code lints (using `scripts/lint`).
+6. Run the tests: `pip install -r requirements_test.txt && python -m pytest` (CI enforces an 85% coverage gate). Add tests for new behavior.
+7. Issue that pull request!
 
 ## Any contributions you make will be under the MIT Software License
 
@@ -44,7 +46,7 @@ People *love* thorough bug reports. I'm not even kidding.
 
 ## Use a Consistent Coding Style
 
-Use [black](https://github.com/ambv/black) to make sure the code follows the style.
+Use [ruff](https://docs.astral.sh/ruff/) to make sure the code follows the style — `scripts/lint` runs `ruff format` and `ruff check --fix` for you, and CI enforces both on every pull request.
 
 ## Test your code modification
 

@@ -1,31 +1,32 @@
-import {
-    mdiCheckCircleOutline,
-    mdiDelete,
-    mdiPencil,
-    mdiDotsHorizontal,
-} from "@mdi/js";
-import { LitElement, html, nothing } from "lit";
+import { LitElement, html } from "lit";
 import { property, state, query } from "lit/decorators.js";
 import type { HomeAssistant } from "custom-card-helpers";
-import { formatDateNumeric } from "custom-card-helpers";
 
 import { localize } from '../localize/localize';
-import { VERSION } from "./const";
 import { loadConfigDashboard } from "./helpers";
 import { commonStyle } from './styles'
-import { EntityRegistryEntry, IntegrationConfig, IntervalType, INTERVAL_TYPES, getIntervalTypeLabels, Label, Task, Tag } from './types';
-import { completeTask, getConfig, loadLabelRegistry, loadRegistryEntries, loadTags, loadTask, loadTasks, removeTask, saveTask, updateTask } from './data/websockets';
+import { EntityRegistryEntry, IntegrationConfig, Label, Task, Tag } from './types';
+import {
+    completeTask,
+    getConfig,
+    loadLabelRegistry,
+    loadRegistryEntries,
+    loadTags,
+    loadTasks,
+    removeTask,
+    subscribeUpdates,
+} from './data/websockets';
+import './components/task-table'
+import './components/task-form'
+import './components/edit-dialog'
+import type { HMEditDialog } from './components/edit-dialog'
 
-interface TaskFormData {
-    title: string;
-    interval_value: number | "";
-    interval_type: string;
-    last_performed: string;
-    icon: string;
-    label: string[];
-    tag: string;
-}
+const RELOAD_DEBOUNCE_MS = 300;
 
+/**
+ * Panel orchestrator: loads data, keeps it live via the backend's
+ * subscribe_updates push channel, and wires the child components together.
+ */
 export class HomeMaintenancePanel extends LitElement {
     @property() hass?: HomeAssistant;
     @property() narrow!: boolean;
@@ -36,358 +37,80 @@ export class HomeMaintenancePanel extends LitElement {
     @state() private registry: EntityRegistryEntry[] = [];
     @state() private labelRegistry: Label[] = [];
 
-    // New Task form state
-    @state() private _formData: TaskFormData = {
-        title: "",
-        interval_value: "",
-        interval_type: "days",
-        last_performed: "",
-        icon: "",
-        label: [],
-        tag: "",
-    };
-    private _advancedOpen: boolean = false;
+    @query('hm-edit-dialog') private _editDialog?: HMEditDialog;
 
-    // Edit dialog state
-    @state() private _editingTaskId: string | null = null;
-    @state() private _editFormData: TaskFormData = {
-        title: "",
-        interval_value: "",
-        interval_type: "days",
-        last_performed: "",
-        icon: "",
-        label: [],
-        tag: "",
-    };
-
-    // Shared overflow menu state
-    @state() private _selectedTaskId: string | null = null;
-    @query("#actions-menu") private _actionsMenu?: any;
-
-    private get _columns() {
-        return {
-            icon: {
-                title: "",
-                moveable: false,
-                showNarrow: false,
-                label: "icon",
-                type: "icon",
-                template: (task: Task) =>
-                    task.icon ? html`<ha-icon .icon=${task.icon}></ha-icon>` : nothing,
-            },
-            tagIcon: {
-                title: "",
-                moveable: false,
-                showNarrow: false,
-                label: "tag",
-                type: "icon",
-                template: (task: any) =>
-                    task.tagIcon ? html`<ha-icon .icon=${task.tagIcon}></ha-icon>` : nothing,
-            },
-            title: {
-                title: 'Title',
-                main: true,
-                showNarrow: true,
-                sortable: true,
-                filterable: true,
-                grows: true,
-                extraTemplate: (task: Task) => {
-                    const entity = this.registry.find((entry) => entry.unique_id === task.id);
-                    if (!entity) return nothing;
-
-                    const labels = this.labelRegistry.filter((lr) => entity.labels.includes(lr.label_id));
-
-                    return labels.length
-                        ? html`<ha-data-table-labels .labels=${labels}></ha-data-table-labels>`
-                        : nothing;
-                },
-            },
-            interval_days: {
-                title: 'Interval',
-                showNarrow: false,
-                sortable: true,
-                minWidth: "100px",
-                maxWidth: "100px",
-                template: (task: Task) => {
-                    const type = task.interval_type;
-                    const isSingular = task.interval_value === 1;
-                    const labelKey = isSingular ? type.slice(0, -1) : type;
-                    return `${task.interval_value} ${localize(`intervals.${labelKey}`, this.hass!.language)}`;
-                }
-            },
-            last_performed: {
-                title: 'Last Performed',
-                showNarrow: false,
-                sortable: true,
-                minWidth: "150px",
-                maxWidth: "150px",
-                template: (task: Task) => {
-                    if (!task.last_performed) return "-";
-
-                    const date = new Date(this.computeISODate(task.last_performed));
-                    return formatDateNumeric(date, this.hass!.locale);
-                }
-            },
-            next_due: {
-                title: localize('panel.cards.current.next', this.hass!.language),
-                showNarrow: true,
-                sortable: true,
-                direction: "asc",
-                minWidth: "100px",
-                maxWidth: "100px",
-                template: (task: any) => {
-                    const now = new Date();
-                    const next = new Date(task.next_due);
-                    const isDue = next <= now;
-
-                    return html`
-                        <span style=${isDue ? "color: var(--error-color, red); font-weight: bold;" : ""}>
-                            ${formatDateNumeric(next, this.hass!.locale)}
-                        </span>` || "—";
-                },
-            },
-            complete: {
-                minWidth: "64px",
-                maxWidth: "64px",
-                sortable: false,
-                groupable: false,
-                showNarrow: true,
-                moveable: false,
-                hideable: false,
-                type: "overflow",
-                template: (task: Task) => html`
-                <ha-icon-button
-                    @click=${() => this._handleCompleteTaskClick(task.id)}
-                    .label="Complete"
-                    title="Mark Task Complete"
-                    .path=${mdiCheckCircleOutline}
-                ></ha-icon-button>
-              `,
-            },
-            actions: {
-                title: "",
-                label: "actions",
-                showNarrow: true,
-                moveable: false,
-                hideable: false,
-                type: "overflow-menu",
-                template: (task: Task) => html`
-                    <ha-icon-button
-                        @click=${(e: Event) => this._handleShowMenu(task.id, e)}
-                        .label="Actions"
-                        title="Actions"
-                        .path=${mdiDotsHorizontal}
-                    ></ha-icon-button>
-                `,
-            },
-        }
-    };
-
-    private get _columnsToDisplay() {
-        return Object.fromEntries(
-            Object.entries(this._columns).filter(([_, col]) =>
-                this.narrow ? col.showNarrow !== false : true
-            )
-        );
-    }
-
-    private get _rows() {
-        return this.tasks.map((task: Task) => ({
-            icon: task.icon,
-            id: task.id,
-            title: task.title,
-            interval_value: task.interval_value,
-            interval_type: task.interval_type,
-            last_performed: task.last_performed ?? 'Never',
-            interval_days: (() => {
-                switch (task.interval_type) {
-                    case "days":
-                        return task.interval_value;
-                    case "weeks":
-                        return task.interval_value * 7;
-                    case "months":
-                        return task.interval_value * 30;
-                    default:
-                        return Number.MAX_SAFE_INTEGER;
-                }
-            })(),
-            next_due: (() => {
-                const [datePart] = task.last_performed.split("T");
-                const [year, month, day] = datePart.split("-").map(Number);
-                const next = new Date(year, month - 1, day);
-
-                switch (task.interval_type) {
-                    case "days":
-                        next.setDate(next.getDate() + task.interval_value);
-                        break;
-                    case "weeks":
-                        next.setDate(next.getDate() + task.interval_value * 7);
-                        break;
-                    case "months":
-                        next.setMonth(next.getMonth() + task.interval_value);
-                        break;
-                    default:
-                        throw new Error(`Unsupported interval type: ${task.interval_type}`);
-                }
-
-                return next;
-            })(),
-            tagIcon: (() => task.tag_id && task.tag_id.trim() !== "" ? "mdi:tag" : undefined)(),
-        }));
-    }
-
-    private get _basicSchema() {
-        return [
-            { name: "title", required: true, selector: { text: {} }, },
-            { name: "interval_value", required: true, selector: { number: { min: 1, mode: "box" } }, },
-            {
-                name: "interval_type",
-                required: true,
-                selector: {
-                    select: {
-                        options: INTERVAL_TYPES.map((type) => ({
-                            value: type,
-                            label: getIntervalTypeLabels(this.hass!.language)[type],
-                        })),
-                        mode: "dropdown"
-                    },
-                },
-            },
-        ]
-    };
-
-    private get _advancedSchema() {
-        return [
-            { name: "last_performed", selector: { date: {} }, },
-            { name: "icon", selector: { icon: {} }, },
-            { name: "label", selector: { label: { multiple: true } }, },
-            { name: "tag", selector: { entity: { filter: { domain: "tag" } } }, },
-        ]
-    };
-
-    private get _editSchema() {
-        return [
-            { name: "interval_value", required: true, selector: { number: { min: 1, mode: "box" } }, },
-            {
-                name: "interval_type",
-                required: true,
-                selector: {
-                    select: {
-                        options: INTERVAL_TYPES.map((type) => ({
-                            value: type,
-                            label: getIntervalTypeLabels(this.hass!.language)[type],
-                        })),
-                        mode: "dropdown"
-                    },
-                },
-            },
-            { type: "constant", name: localize('panel.dialog.edit_task.sections.optional', this.hass!.language), disabled: true },
-            { name: "last_performed", selector: { date: {} }, },
-            { name: "icon", selector: { icon: {} }, },
-            { name: "label", selector: { label: { multiple: true } }, },
-            { name: "tag", selector: { entity: { filter: { domain: "tag" } } }, },
-        ]
-    };
-
-    private _computeLabel = (schema: { name: string }): string => {
-        try {
-            return localize(`panel.cards.new.fields.${schema.name}.heading`, this.hass!.language) ?? schema.name;
-        } catch {
-            return schema.name;
-        }
-    }
-
-    private _computeHelper = (schema: { name: string }): string => {
-        try {
-            return localize(`panel.cards.new.fields.${schema.name}.helper`, this.hass!.language) ?? "";
-        } catch {
-            return "";
-        }
-    }
-
-    private _computeEditLabel = (schema: { name: string }): string => {
-        try {
-            return localize(`panel.dialog.edit_task.fields.${schema.name}.heading`, this.hass!.language) ?? schema.name;
-        } catch {
-            return schema.name;
-        }
-    }
-
-    private _computeEditHelper = (schema: { name: string }): string => {
-        try {
-            return localize(`panel.dialog.edit_task.fields.${schema.name}.helper`, this.hass!.language) ?? "";
-        } catch {
-            return "";
-        }
-    }
-
-    private async loadData() {
-        await loadConfigDashboard();
-        this.tags = await loadTags(this.hass!);
-        this.tasks = await loadTasks(this.hass!);
-        this.config = await getConfig(this.hass!);
-        this.registry = await loadRegistryEntries(this.hass!);
-        this.labelRegistry = await loadLabelRegistry(this.hass!);
-    }
-
-    private async resetForm() {
-        this._formData = {
-            title: "",
-            interval_value: "",
-            interval_type: "days",
-            last_performed: "",
-            icon: "",
-            label: [],
-            tag: "",
-        };
-
-        this.tasks = await loadTasks(this.hass!);
-    }
-
-    private async resetEditForm() {
-        this._editFormData = {
-            title: "",
-            interval_value: "",
-            interval_type: "days",
-            last_performed: "",
-            icon: "",
-            label: [],
-            tag: "",
-        };
-    }
-
-    private computeISODate(dateStr: string): string {
-        let isoDateStr: string;
-
-        if (dateStr) {
-            // Only take the YYYY-MM-DD part to avoid time zone issues
-            const [yearStr, monthStr, dayStr] = dateStr.split("T")[0].split("-");
-            const year = Number(yearStr);
-            const month = Number(monthStr);
-            const day = Number(dayStr);
-
-            if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
-                const parsedDate = new Date(year, month - 1, day);
-                parsedDate.setHours(0, 0, 0, 0);
-                isoDateStr = parsedDate.toISOString();
-            } else {
-                alert("Invalid date entered.");
-                const fallback = new Date();
-                fallback.setHours(0, 0, 0, 0);
-                isoDateStr = fallback.toISOString();
-            }
-        } else {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            isoDateStr = today.toISOString();
-        }
-
-        return isoDateStr;
-    }
+    private _unsubscribe?: () => Promise<void>;
+    private _reloadTimer?: ReturnType<typeof setTimeout>;
 
     connectedCallback() {
         super.connectedCallback();
-        this.loadData();
+        this._initialize();
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        if (this._reloadTimer !== undefined) clearTimeout(this._reloadTimer);
+        this._unsubscribe?.();
+        this._unsubscribe = undefined;
+    }
+
+    private async _initialize() {
+        await this._loadData();
+        try {
+            this._unsubscribe = await subscribeUpdates(this.hass!, () => this._scheduleReload());
+        } catch (e) {
+            console.error("Failed to subscribe to task updates:", e);
+        }
+    }
+
+    private _scheduleReload() {
+        if (this._reloadTimer !== undefined) clearTimeout(this._reloadTimer);
+        this._reloadTimer = setTimeout(() => {
+            this._reloadTimer = undefined;
+            this._loadData();
+        }, RELOAD_DEBOUNCE_MS);
+    }
+
+    private async _loadData() {
+        await loadConfigDashboard();
+        // Fetch everything concurrently, then assign synchronously so
+        // LitElement batches the updates into a single render.
+        const [tags, tasks, config, registry, labelRegistry] = await Promise.all([
+            loadTags(this.hass!),
+            loadTasks(this.hass!),
+            getConfig(this.hass!),
+            loadRegistryEntries(this.hass!),
+            loadLabelRegistry(this.hass!),
+        ]);
+        this.tags = tags;
+        this.tasks = tasks;
+        this.config = config;
+        this.registry = registry;
+        this.labelRegistry = labelRegistry;
+    }
+
+    private _handleComplete(e: CustomEvent) {
+        completeTask(this.hass!, e.detail.taskId).catch((err) =>
+            console.error("Failed to complete task:", err));
+    }
+
+    private _handleMenuAction(e: CustomEvent) {
+        const { taskId, action } = e.detail;
+        if (action === 'edit') {
+            this._editDialog?.open(taskId);
+        } else if (action === 'delete') {
+            this._handleRemove(taskId);
+        }
+    }
+
+    private async _handleRemove(taskId: string) {
+        const msg = localize('panel.cards.current.confirm_remove', this.hass!.language)
+        if (!confirm(msg)) return;
+        try {
+            await removeTask(this.hass!, taskId);
+        } catch (e) {
+            console.error("Failed to remove task:", e);
+        }
     }
 
     render() {
@@ -405,7 +128,7 @@ export class HomeMaintenancePanel extends LitElement {
                         ${this.config?.options.sidebar_title}
                     </div>
                     <div class="version">
-                        v${VERSION}
+                        v${this.config?.version ?? ""}
                     </div>
                 </div>
             </div>
@@ -415,278 +138,38 @@ export class HomeMaintenancePanel extends LitElement {
                     header="${localize('panel.cards.new.title', this.hass.language)}"
                     class="card-new"
                 >
-                    <div class="card-content">${this.renderForm()}</div>
+                    <div class="card-content">
+                        <hm-task-form .hass=${this.hass}></hm-task-form>
+                    </div>
                 </ha-card>
 
                 <ha-card
                     header="${localize('panel.cards.current.title', this.hass.language)}"
                     class="card-current"
                 >
-                    <div class="card-content">${this.renderTasks()}</div>
+                    <div class="card-content">
+                        <hm-task-table
+                            .hass=${this.hass}
+                            .narrow=${this.narrow}
+                            .tasks=${this.tasks}
+                            .registry=${this.registry}
+                            .labelRegistry=${this.labelRegistry}
+                            @task-complete=${this._handleComplete}
+                            @task-menu-action=${this._handleMenuAction}
+                        ></hm-task-table>
+                    </div>
                 </ha-card>
             </div>
 
-            ${this.renderEditDialog()}
-            ${this.renderActionsMenu()}
-        `;
-    }
-
-    renderForm() {
-        if (!this.hass) return html``;
-
-        return html`
-            <ha-form
+            <hm-edit-dialog
                 .hass=${this.hass}
-                .schema=${this._basicSchema}
-                .computeLabel=${this._computeLabel.bind(this)}
-                .computeHelper=${this._computeHelper.bind(this)}
-                .data=${this._formData}
-                @value-changed=${(e: CustomEvent) => this._handleFormValueChanged(e)}
-            ></ha-form>
-
-            <ha-expansion-panel
-                header="${localize('panel.cards.new.sections.optional', this.hass.language)}"
-                .opened=${this._advancedOpen}
-                @opened-changed=${(e: CustomEvent) => (this._advancedOpen = e.detail.value)}
-            >
-                <ha-form
-                    .hass=${this.hass}
-                    .data=${this._formData}
-                    .schema=${this._advancedSchema}
-                    .computeLabel=${this._computeLabel.bind(this)}
-                    .computeHelper=${this._computeHelper.bind(this)}
-                    @value-changed=${(e: CustomEvent) => this._handleFormValueChanged(e)}
-                ></ha-form>
-            </ha-expansion-panel>
-
-            <div class="form-field">
-                <mwc-button @click=${this._handleAddTaskClick}>
-                    ${localize('panel.cards.new.actions.add_task', this.hass.language)}
-                </mwc-button>
-            </div>
+                .registry=${this.registry}
+                .labelRegistry=${this.labelRegistry}
+            ></hm-edit-dialog>
         `;
     }
 
-    renderTasks() {
-        if (!this.hass) return html``;
-
-        if (!this.tasks || this.tasks.length === 0) {
-            return html`<span>${localize('common.no_tasks', this.hass!.language)}</span>`;
-        }
-
-        return html`
-            <div class="table-wrapper">
-                <ha-data-table
-                    .hass=${this.hass}
-                    .columns=${this._columnsToDisplay}
-                    .data=${this._rows}
-                    .narrow=${this.narrow}
-                    auto-height
-                    id="tasks-table"
-                    class="tasks-table"
-                    clickable
-                >
-                </ha-data-table>
-            </div>
-        `;
-    }
-
-    renderEditDialog() {
-        if (!this.hass) return html``;
-
-        if (!this._editingTaskId) return html``;
-
-        return html`
-            <ha-dialog
-                open
-                heading="${localize('panel.dialog.edit_task.title', this.hass.language)}: ${this._editFormData.title}"
-                @closed=${this._handleDialogClosed}
-            >
-                <ha-form
-                    .hass=${this.hass}
-                    .schema=${this._editSchema}
-                    .computeLabel=${this._computeEditLabel.bind(this)}
-                    .computeHelper=${this._computeEditHelper.bind(this)}
-                    .data=${this._editFormData}
-                    @value-changed=${(e: CustomEvent) => this._handleEditFormValueChanged(e)}
-                ></ha-form>
-
-                <mwc-button slot="secondaryAction" @click=${() => (this._editingTaskId = null)}>
-                    ${localize('panel.dialog.edit_task.actions.cancel', this.hass.language)}
-                </mwc-button>
-                <mwc-button slot="primaryAction" @click=${this._handleSaveEditClick}>
-                    ${localize('panel.dialog.edit_task.actions.save', this.hass.language)}
-                </mwc-button>
-            </ha-dialog>
-        `;
-    }
-
-    renderActionsMenu() {
-        if (!this.hass) return html``;
-
-        return html`
-            <ha-md-menu id="actions-menu" positioning="fixed">
-                <ha-md-menu-item
-                    @click=${() => {
-                if (this._selectedTaskId) {
-                    this._handleOpenEditDialogClick(this._selectedTaskId);
-                }
-            }}
-                >
-                    <ha-svg-icon slot="start" path=${mdiPencil}></ha-svg-icon>
-                    ${localize('panel.cards.current.actions.edit', this.hass!.language)}
-                </ha-md-menu-item>
-                <ha-md-menu-item
-                    @click=${() => {
-                if (this._selectedTaskId) {
-                    this._handleRemoveTaskClick(this._selectedTaskId);
-                }
-            }}
-                >
-                    <ha-svg-icon slot="start" path=${mdiDelete}></ha-svg-icon>
-                    ${localize('panel.cards.current.actions.remove', this.hass!.language)}
-                </ha-md-menu-item>
-            </ha-md-menu>
-        `;
-    }
-
-    private async _handleAddTaskClick() {
-        const { title, interval_value, interval_type, last_performed, tag, icon, label } = this._formData;
-
-        if (!title?.trim() || !interval_value || !interval_type) {
-            const msg = localize("panel.cards.new.alerts.required", this.hass!.language);
-            alert(msg);
-            return;
-        }
-
-        const payload: Record<string, any> = {
-            title: title.trim(),
-            interval_value,
-            interval_type,
-            last_performed: this.computeISODate(last_performed),
-            tag_id: tag?.trim() || undefined,
-            icon: icon?.trim() || "mdi:calendar-check",
-            labels: label ?? [],
-        };
-
-        try {
-            await saveTask(this.hass!, payload);
-            await this.resetForm();
-        } catch (error) {
-            console.error("Failed to add task:", error);
-            const msg = localize('panel.cards.new.alerts.error', this.hass!.language)
-            alert(msg);
-        }
-    };
-
-    private async _handleCompleteTaskClick(id: string) {
-        try {
-            await completeTask(this.hass!, id);
-            await this.loadData();
-        } catch (e) {
-            console.error("Failed to complete task:", e);
-        }
-    }
-
-    private async _handleOpenEditDialogClick(id: string) {
-        try {
-            const task: Task = await loadTask(this.hass!, id);
-            this._editingTaskId = task.id;
-            let labels: Label[] = [];
-            const entity = this.registry.find((entry) => entry.unique_id === task.id);
-            if (entity)
-                labels = this.labelRegistry.filter((lr) => entity.labels.includes(lr.label_id));
-
-            this._editFormData = {
-                title: task.title,
-                interval_value: task.interval_value,
-                interval_type: task.interval_type,
-                last_performed: task.last_performed ?? "",
-                icon: task.icon ?? "",
-                label: labels.map((l) => l.label_id),
-                tag: task.tag_id ?? "",
-            };
-
-            await this.updateComplete;
-        } catch (e) {
-            console.error("Failed to fetch task for edit:", e);
-        }
-    }
-
-    private async _handleSaveEditClick() {
-        if (!this._editingTaskId) return;
-
-        const lastPerformedISO = this.computeISODate(this._editFormData.last_performed);
-        if (!lastPerformedISO) return;
-
-        const updates: Record<string, any> = {
-            title: this._editFormData.title.trim(),
-            interval_value: Number(this._editFormData.interval_value),
-            interval_type: this._editFormData.interval_type,
-            last_performed: lastPerformedISO,
-            icon: this._editFormData.icon?.trim() || "mdi:calendar-check",
-            labels: this._editFormData.label,
-        };
-
-        if (this._editFormData.tag && this._editFormData.tag.trim() !== "") {
-            updates.tag_id = this._editFormData.tag.trim();
-        } else {
-            updates.tag_id = null;
-        }
-
-        const payload = {
-            task_id: this._editingTaskId,
-            updates,
-        };
-
-        try {
-            await updateTask(this.hass!, payload);
-            this._editingTaskId = null;
-            await this.resetEditForm();
-            await this.loadData();
-        } catch (e) {
-            console.error("Failed to update task:", e);
-        }
-    }
-
-    private async _handleRemoveTaskClick(id: string) {
-        const msg = localize('panel.cards.current.confirm_remove', this.hass!.language)
-        if (!confirm(msg)) return;
-        try {
-            await removeTask(this.hass!, id);
-            await this.loadData();
-        } catch (e) {
-            console.error("Failed to remove task:", e);
-        }
-    }
-
-    private _handleDialogClosed(e: CustomEvent) {
-        const action = e.detail?.action;
-        if (action === "close" || action === "cancel") {
-            this._editingTaskId = null;
-        }
-    }
-
-    private _handleFormValueChanged(ev: CustomEvent) {
-        this._formData = { ...this._formData, ...ev.detail.value };
-    }
-
-    private _handleEditFormValueChanged(ev: CustomEvent) {
-        this._editFormData = { ...this._editFormData, ...ev.detail.value };
-    }
-
-    private _handleShowMenu(taskId: string, ev: Event) {
-        this._selectedTaskId = taskId;
-
-        if (!this._actionsMenu) {
-            return;
-        }
-
-        this._actionsMenu.anchorElement = ev.currentTarget as HTMLElement;
-        this._actionsMenu.show();
-
-        ev.stopPropagation();
-    } static styles = commonStyle;
+    static styles = commonStyle;
 }
 
 customElements.define("home-maintenance-panel", HomeMaintenancePanel);

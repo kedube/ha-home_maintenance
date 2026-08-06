@@ -18,3 +18,14 @@ updates:
     ignore:
       # Dependabot should not update Home Assistant as that should match the homeassistant key in hacs.json
       - dependency-name: "homeassistant"
+
+  - package-ecosystem: "npm"
+    directory: "/custom_components/home_maintenance/panel"
+    schedule:
+      interval: "monthly"
+    groups:
+      # One grouped PR per month; the rebuild-panel workflow regenerates
+      # dist/main.js on it so the CI bundle drift check passes.
+      panel-dependencies:
+        patterns:
+          - "*"

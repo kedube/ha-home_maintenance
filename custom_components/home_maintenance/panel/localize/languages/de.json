@@ -12,6 +12,11 @@
         "month": "Monat",
         "months": "Monate"
     },
+    "trigger_types": {
+        "time": "Zeitbasiert",
+        "count": "Zählerbasiert",
+        "runtime": "Laufzeitbasiert"
+    },
     "panel": {
         "cards": {
             "new": {
@@ -38,6 +43,27 @@
                     },
                     "label": {
                         "heading": "Bezeichnung(en)"
+                    },
+                    "area": {
+                        "heading": "Bereich"
+                    },
+                    "trigger_type": {
+                        "heading": "Auslöser-Typ"
+                    },
+                    "count_entity_id": {
+                        "heading": "Gezählte Entität"
+                    },
+                    "count_threshold": {
+                        "heading": "Zähl-Schwellwert"
+                    },
+                    "runtime_entity_id": {
+                        "heading": "Laufzeit-Sensor"
+                    },
+                    "runtime_threshold": {
+                        "heading": "Laufzeit-Schwellwert"
+                    },
+                    "description": {
+                        "heading": "Beschreibung"
                     }
                 },
                 "sections": {
@@ -87,6 +113,30 @@
                     },
                     "label": {
                         "heading": "Bezeichnung(en)"
+                    },
+                    "area": {
+                        "heading": "Bereich"
+                    },
+                    "trigger_type": {
+                        "heading": "Auslöser-Typ"
+                    },
+                    "count_entity_id": {
+                        "heading": "Gezählte Entität"
+                    },
+                    "count_threshold": {
+                        "heading": "Zähl-Schwellwert"
+                    },
+                    "runtime_entity_id": {
+                        "heading": "Laufzeit-Sensor"
+                    },
+                    "runtime_threshold": {
+                        "heading": "Laufzeit-Schwellwert"
+                    },
+                    "title": {
+                        "heading": "Titel"
+                    },
+                    "description": {
+                        "heading": "Beschreibung"
                     }
                 },
                 "sections": {

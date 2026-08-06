@@ -7,7 +7,6 @@ __pycache__
 
 # Typescript
 custom_components/home_maintenance/panel/node_modules
-package-lock.json
 
 
 # misc
@@ -22,3 +21,4 @@ coverage.xml
 # Home Assistant configuration
 config/*
 !config/configuration.yaml
+.venv*

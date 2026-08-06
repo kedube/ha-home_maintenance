@@ -52,17 +52,18 @@ class HomeMaintenanceConfigFlow(ConfigFlow, domain=DOMAIN):
 
     @staticmethod
     @callback
-    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:  # noqa: ARG004
         """Handle callback for options flow."""
-        return HomeMaintenanceOptionsFlowHandler(config_entry)
+        return HomeMaintenanceOptionsFlowHandler()
 
 
 class HomeMaintenanceOptionsFlowHandler(OptionsFlow):
-    """Options flow for Home Maintenenance."""
+    """
+    Options flow for Home Maintenenance.
 
-    def __init__(self, config_entry: ConfigEntry) -> None:
-        """Initialize setup of options flow."""
-        self.config_entry = config_entry
+    config_entry is provided by the OptionsFlow base class; assigning it
+    manually has been an error since HA made it a read-only property.
+    """
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None

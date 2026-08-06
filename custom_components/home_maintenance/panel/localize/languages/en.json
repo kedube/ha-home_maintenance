@@ -12,6 +12,11 @@
         "month": "Month",
         "months": "Months"
     },
+    "trigger_types": {
+        "time": "Time-based",
+        "count": "Count-based",
+        "runtime": "Runtime-based"
+    },
     "panel": {
         "cards": {
             "new": {
@@ -38,6 +43,27 @@
                     },
                     "label": {
                         "heading": "Label(s)"
+                    },
+                    "area": {
+                        "heading": "Area"
+                    },
+                    "description": {
+                        "heading": "Description"
+                    },
+                    "trigger_type": {
+                        "heading": "Trigger type"
+                    },
+                    "count_entity_id": {
+                        "heading": "Counted entity"
+                    },
+                    "count_threshold": {
+                        "heading": "Count threshold"
+                    },
+                    "runtime_entity_id": {
+                        "heading": "Runtime sensor"
+                    },
+                    "runtime_threshold": {
+                        "heading": "Runtime threshold"
                     }
                 },
                 "sections": {
@@ -87,6 +113,30 @@
                     },
                     "label": {
                         "heading": "Label(s)"
+                    },
+                    "area": {
+                        "heading": "Area"
+                    },
+                    "trigger_type": {
+                        "heading": "Trigger type"
+                    },
+                    "count_entity_id": {
+                        "heading": "Counted entity"
+                    },
+                    "count_threshold": {
+                        "heading": "Count threshold"
+                    },
+                    "runtime_entity_id": {
+                        "heading": "Runtime sensor"
+                    },
+                    "runtime_threshold": {
+                        "heading": "Runtime threshold"
+                    },
+                    "title": {
+                        "heading": "Title"
+                    },
+                    "description": {
+                        "heading": "Description"
                     }
                 },
                 "sections": {

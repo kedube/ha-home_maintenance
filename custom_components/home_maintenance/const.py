@@ -4,7 +4,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers import config_validation as cv
 
-VERSION = "1.5.2"
+VERSION = "1.5.5"
 NAME = "Home Maintenance"
 MANUFACTURER = "@TJPoorman"
 
@@ -22,11 +22,32 @@ PANEL_NAME = "home-maintenance-panel"
 
 DEVICE_KEY = "home_maintenance_hub"
 
+# Dispatcher signals fired by the TaskStore on mutations. Entities, the
+# watched-entity listeners, and panel subscriptions all react to these.
+SIGNAL_TASK_ADDED = f"{DOMAIN}_task_added"  # payload: (task, labels)
+SIGNAL_TASK_UPDATED = f"{DOMAIN}_task_updated"  # payload: (task_id,)
+SIGNAL_TASK_REMOVED = f"{DOMAIN}_task_removed"  # payload: (task_id,)
+SIGNAL_TASKS_CHANGED = f"{DOMAIN}_tasks_changed"  # payload: none
+
 SERVICE_RESET = "reset_last_performed"
 SERVICE_RESET_SCHEMA = vol.Schema(
     {
         vol.Required("entity_id"): cv.entity_id,
         vol.Optional("performed_date"): cv.string,
+    }
+)
+
+SERVICE_INCREMENT_COUNT = "increment_count"
+SERVICE_INCREMENT_COUNT_SCHEMA = vol.Schema(
+    {
+        vol.Required("entity_id"): cv.entity_id,
+    }
+)
+
+SERVICE_RESET_COUNT = "reset_count"
+SERVICE_RESET_COUNT_SCHEMA = vol.Schema(
+    {
+        vol.Required("entity_id"): cv.entity_id,
     }
 )
 
