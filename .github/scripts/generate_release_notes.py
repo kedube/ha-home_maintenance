@@ -73,7 +73,7 @@ def main() -> int:
     version = sys.argv[1]
     tag = f"v{version}"
     output_path = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("release_notes.md")
-    repo = os.environ.get("GITHUB_REPOSITORY", "kedube/home_maintenance")
+    repo = os.environ.get("GITHUB_REPOSITORY", "kedube/ha-maintenance_tracker")
 
     previous_tag = _previous_tag(tag)
     sections: list[str] = []
