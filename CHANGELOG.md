@@ -4,6 +4,12 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
+## Unreleased
+
+- Bundled brand icons (`brand/icon.png`, `brand/icon@2x.png`) — a house with
+  hammer and wrench — so HACS shows the integration's own icon instead of
+  falling back to the brands repository
+
 ## 1.5.6 — 2026-08-06
 
 - Home Assistant 2026.3 compatibility: replaced removed `ha-md-menu` and
