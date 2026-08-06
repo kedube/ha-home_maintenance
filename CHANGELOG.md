@@ -4,7 +4,7 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
-## Unreleased
+## 1.5.6 — 2026-08-06
 
 - Home Assistant 2026.3 compatibility: replaced removed `ha-md-menu` and
   `mwc-button` components with `ha-dropdown`-based `hm-task-menu` and
