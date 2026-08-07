@@ -4,7 +4,7 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
-## Unreleased
+## 1.5.15 — 2026-08-07
 
 - Groups card: the Create action now reads the group name directly from the
   text field as a fallback (guarding against environments where another
