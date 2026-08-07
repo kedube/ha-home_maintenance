@@ -130,7 +130,14 @@ show_search: true            # search box + group filter
 
 The card updates live over the same push channel as the panel, and its header links back to the full panel for editing. Set `group: Kitchen` to pin a card to a single [task group](#task-groups) (this hides the group dropdown) — handy for one card per room or system.
 
-For a complete view combining the card with templated summaries and core cards, see the [example dashboard](docs/example-dashboard.md).
+An **Add Task** card is bundled too — the panel's full add-task form (trigger types, groups, and all optional fields) on any dashboard, so tasks can be created without opening the panel:
+
+```yaml
+type: custom:home-maintenance-add-task-card
+title: Add Maintenance Task   # optional header (empty for none)
+```
+
+For a complete view combining the cards with templated summaries and core cards, see the [example dashboard](docs/example-dashboard.md).
 
 ## Entities
 

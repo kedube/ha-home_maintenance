@@ -52,8 +52,14 @@ class HMTaskForm extends LitElement {
         }
 
         try {
+            const title = this._formData.title.trim();
             await saveTask(this.hass!, taskFormToAddPayload(this._formData, lastPerformedISO));
             this._formData = emptyTaskFormData();
+            this.dispatchEvent(new CustomEvent('task-added', {
+                detail: { title },
+                bubbles: true,
+                composed: true,
+            }));
         } catch (error) {
             console.error("Failed to add task:", error);
             alert(localize('panel.cards.new.alerts.error', this.hass!.language));

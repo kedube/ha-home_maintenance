@@ -95,6 +95,15 @@ sections:
         title: Outdoors
         group: Outdoors
         show_search: false
+
+  # ── Create tasks without opening the panel ────────────────────────────
+  - type: grid
+    cards:
+      - type: heading
+        heading: New task
+        icon: mdi:plus-circle-outline
+      - type: custom:home-maintenance-add-task-card
+        title: Add Maintenance Task
 ```
 
 ## What each piece does
@@ -112,6 +121,9 @@ sections:
   sensors that work with any core card (tile, glance, history-graph, …).
 - **By area** — `group: Kitchen` pins a card to one group and hides the group
   dropdown, giving each room or system its own card.
+- **New task** — the add-task card embeds the panel's full creation form
+  (trigger types, groups, and every optional field) and shows a toast when the
+  task is created. Its only option is `title` (empty for no header).
 
 ## Card options
 

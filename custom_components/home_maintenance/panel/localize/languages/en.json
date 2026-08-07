@@ -18,6 +18,11 @@
         "count": "Count-based",
         "runtime": "Runtime-based"
     },
+    "card": {
+        "add_task": {
+            "added": "\"{title}\" added."
+        }
+    },
     "panel": {
         "cards": {
             "new": {

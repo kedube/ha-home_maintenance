@@ -18,6 +18,11 @@
         "count": "Zählerbasiert",
         "runtime": "Laufzeitbasiert"
     },
+    "card": {
+        "add_task": {
+            "added": "\"{title}\" wurde hinzugefügt."
+        }
+    },
     "panel": {
         "cards": {
             "new": {

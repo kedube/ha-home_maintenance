@@ -4,6 +4,13 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
+## Unreleased
+
+- Add Task Lovelace card (`custom:home-maintenance-add-task-card`): the
+  panel's full task-creation form — trigger types, groups, and all optional
+  fields — on any dashboard, with a confirmation toast. Auto-registered like
+  the todo card, and included in the example dashboard.
+
 ## 1.5.9 — 2026-08-07
 
 - Todo card: new `group` option pins a card to a single task group and hides

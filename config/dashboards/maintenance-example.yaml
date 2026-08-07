@@ -58,3 +58,12 @@ views:
             title: Outdoors
             group: Outdoors
             show_search: false
+
+      # ── Create tasks without opening the panel ────────────────────────
+      - type: grid
+        cards:
+          - type: heading
+            heading: New task
+            icon: mdi:plus-circle-outline
+          - type: custom:home-maintenance-add-task-card
+            title: Add Maintenance Task
