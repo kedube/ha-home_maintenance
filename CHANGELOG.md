@@ -4,6 +4,21 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
+## Unreleased
+
+- Compact task forms, restoring the density of the original design while
+  keeping trigger types, groups, and all optional fields: the panel now
+  stacks its cards in a single full-width column with Create New Task on
+  top, whose main fields (title, trigger type, trigger fields, last
+  performed) and the Add Task button sit on one line. Optional settings
+  expand onto a second line, with description on its own line below. The
+  edit dialog and Add Task Lovelace card use the same responsive grid,
+  fitting as many fields per line as their width allows.
+- Cache busting: the panel and card bundles are served with a `?v=<version>`
+  query string tied to the installed integration version, so browsers fetch
+  the matching frontend after an upgrade instead of reusing stale cached
+  modules.
+
 ## 1.5.11 — 2026-08-07
 
 - Add Task Lovelace card (`custom:home-maintenance-add-task-card`): the

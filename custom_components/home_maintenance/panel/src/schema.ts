@@ -41,10 +41,14 @@ export const taskToFormData = (
     group_id: task.group_id ?? "",
 });
 
-/** Two-column responsive layout section (single column on narrow screens). */
+/**
+ * Responsive multi-column layout section: fits as many fields per line as
+ * the container allows (all five on a wide card, fewer on narrow screens).
+ */
 const grid = (schema: any[]) => ({
     name: "",
     type: "grid",
+    column_min_width: "170px",
     schema,
 });
 
@@ -112,7 +116,6 @@ export const groupSelector = (groups: string[], lang: string) => ({
 const optionalFields = (multilineDescription: boolean, groups: string[], lang: string): any[] => [
     grid([
         groupSelector(groups, lang),
-        { name: "last_performed", selector: { date: {} }, },
         { name: "icon", selector: { icon: {} }, },
         { name: "tag", selector: { entity: { filter: { domain: "tag" } } }, },
         { name: "area", selector: { area: {} }, },
@@ -121,11 +124,16 @@ const optionalFields = (multilineDescription: boolean, groups: string[], lang: s
     { name: "description", selector: { text: multilineDescription ? { multiline: true } : {} } },
 ];
 
+/**
+ * Main task fields on one grid line (wraps on narrow screens):
+ * title | trigger type | the trigger's two fields | last performed.
+ */
 export const basicSchema = (formData: TaskFormData, lang: string): any[] => [
     grid([
         { name: "title", required: true, selector: { text: {} }, },
         triggerTypeSelector(lang),
         ...triggerFields(formData, lang),
+        { name: "last_performed", selector: { date: {} }, },
     ]),
 ];
 

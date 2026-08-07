@@ -15,9 +15,11 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 PANEL_FILENAME = "panel/main.js"
 PANEL_URL = "home-maintenance"
 PANEL_API_PATH = "/home_maintenance_static"
-PANEL_API_URL = PANEL_API_PATH + "/main.js"
-CARD_API_URL = PANEL_API_PATH + "/todo-card.js"
-ADD_TASK_CARD_API_URL = PANEL_API_PATH + "/add-task-card.js"
+# The ?v= query string maps each frontend bundle to the installed integration
+# version so browsers refetch (instead of reusing cached modules) on upgrade.
+PANEL_API_URL = f"{PANEL_API_PATH}/main.js?v={VERSION}"
+CARD_API_URL = f"{PANEL_API_PATH}/todo-card.js?v={VERSION}"
+ADD_TASK_CARD_API_URL = f"{PANEL_API_PATH}/add-task-card.js?v={VERSION}"
 PANEL_TITLE = NAME
 PANEL_ICON = "mdi:hammer-wrench"
 PANEL_NAME = "home-maintenance-panel"

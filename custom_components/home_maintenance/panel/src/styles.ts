@@ -36,11 +36,12 @@ export const commonStyle = css`
 
     .view {
         height: calc(100vh - 65px);
+        overflow-y: auto;
         display: flex;
-        align-content: start;
-        justify-content: center;
-        flex-wrap: wrap;
-        align-items: flex-start;
+        flex-direction: column;
+        align-items: center;
+        padding: 8px 16px;
+        box-sizing: border-box;
     }
 
     ha-card {
@@ -48,14 +49,31 @@ export const commonStyle = css`
         margin: 5px;
     }
 
-    .card-new {
-        width: 500px;
-        max-width: 500px;
+    .card-new,
+    .card-current {
+        width: 100%;
+        max-width: 1100px;
+        margin: 5px 0;
     }
 
-    .card-current {
-        width: 850px;
-        max-width: 850px;
+    /* Main fields and the Add Task button share one line; the button wraps
+       below (right-aligned) when the fields need the full width. */
+    .basic-row {
+        display: flex;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .basic-row .basic-form {
+        flex: 1 1 500px;
+        min-width: 0;
+    }
+
+    .basic-row .add-button {
+        flex-shrink: 0;
+        margin-top: 10px;
+        margin-left: auto;
     }
 
     ha-expansion-panel {

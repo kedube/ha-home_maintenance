@@ -38,11 +38,12 @@ Try polyfilling it using "@formatjs/intl-pluralrules"
 
     .view {
         height: calc(100vh - 65px);
+        overflow-y: auto;
         display: flex;
-        align-content: start;
-        justify-content: center;
-        flex-wrap: wrap;
-        align-items: flex-start;
+        flex-direction: column;
+        align-items: center;
+        padding: 8px 16px;
+        box-sizing: border-box;
     }
 
     ha-card {
@@ -50,14 +51,31 @@ Try polyfilling it using "@formatjs/intl-pluralrules"
         margin: 5px;
     }
 
-    .card-new {
-        width: 500px;
-        max-width: 500px;
+    .card-new,
+    .card-current {
+        width: 100%;
+        max-width: 1100px;
+        margin: 5px 0;
     }
 
-    .card-current {
-        width: 850px;
-        max-width: 850px;
+    /* Main fields and the Add Task button share one line; the button wraps
+       below (right-aligned) when the fields need the full width. */
+    .basic-row {
+        display: flex;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .basic-row .basic-form {
+        flex: 1 1 500px;
+        min-width: 0;
+    }
+
+    .basic-row .add-button {
+        flex-shrink: 0;
+        margin-top: 10px;
+        margin-left: auto;
     }
 
     ha-expansion-panel {
@@ -297,15 +315,21 @@ Try polyfilling it using "@formatjs/intl-pluralrules"
                     </div>
                 `)}
             </div>
-        `:p``}};w.styles=y,n([s()],w.prototype,"hass",2),n([s()],w.prototype,"narrow",2),n([s({attribute:!1})],w.prototype,"tasks",2),n([s({attribute:!1})],w.prototype,"groups",2),n([s({attribute:!1})],w.prototype,"registry",2),n([s({attribute:!1})],w.prototype,"labelRegistry",2);customElements.get("hm-task-table")||customElements.define("hm-task-table",w);var w5=["days","weeks","months"];function B5(C){return{days:A("intervals.days",C),weeks:A("intervals.weeks",C),months:A("intervals.months",C)}}var J=()=>({title:"",trigger_type:"time",interval_value:"",interval_type:"days",last_performed:"",icon:"",label:[],tag:"",count_entity_id:"",count_threshold:"",runtime_entity_id:"",runtime_threshold:"",area:"",description:"",group_id:""}),T5=(C,H,V)=>({title:C.title,trigger_type:C.trigger_type??"time",interval_value:C.interval_value,interval_type:C.interval_type,last_performed:C.last_performed??"",icon:C.icon??"",label:V.map(L=>L.label_id),tag:C.tag_id??"",count_entity_id:C.count_entity_id??"",count_threshold:C.count_threshold??"",runtime_entity_id:C.runtime_entity_id??"",runtime_threshold:C.runtime_threshold??"",area:H?.area_id??"",description:C.description??"",group_id:C.group_id??""}),m2=C=>({name:"",type:"grid",schema:C}),P5=C=>({name:"trigger_type",required:!0,selector:{select:{options:[{value:"time",label:A("trigger_types.time",C)},{value:"count",label:A("trigger_types.count",C)},{value:"runtime",label:A("trigger_types.runtime",C)}],mode:"dropdown"}}}),_5=(C,H)=>C.trigger_type==="count"?[{name:"count_entity_id",required:!0,selector:{entity:{}}},{name:"count_threshold",required:!0,selector:{number:{min:1,mode:"box"}}}]:C.trigger_type==="runtime"?[{name:"runtime_entity_id",required:!0,selector:{entity:{filter:{domain:"sensor"}}}},{name:"runtime_threshold",required:!0,selector:{number:{min:.1,step:.1,mode:"box"}}}]:[{name:"interval_value",required:!0,selector:{number:{min:1,mode:"box"}}},{name:"interval_type",required:!0,selector:{select:{options:w5.map(V=>({value:V,label:B5(H)[V]})),mode:"dropdown"}}}],p2=(C,H)=>({name:"group_id",selector:{select:{options:[{value:"",label:A("common.ungrouped",H)},...C.map(V=>({value:V,label:V}))],mode:"dropdown",custom_value:!0}}}),E5=(C,H,V)=>[m2([p2(H,V),{name:"last_performed",selector:{date:{}}},{name:"icon",selector:{icon:{}}},{name:"tag",selector:{entity:{filter:{domain:"tag"}}}},{name:"area",selector:{area:{}}},{name:"label",selector:{label:{multiple:!0}}}]),{name:"description",selector:{text:C?{multiline:!0}:{}}}],R5=(C,H)=>[m2([{name:"title",required:!0,selector:{text:{}}},P5(H),..._5(C,H)])],F5=(C,H)=>E5(!1,C,H),D5=(C,H,V)=>[m2([{name:"title",selector:{text:{}}},P5(H),..._5(C,H)]),{type:"constant",name:A("panel.dialog.edit_task.sections.optional",H),disabled:!0},...E5(!0,V,H)],R1=C=>C.title?.trim()?C.trigger_type==="count"?!!(C.count_entity_id?.trim()&&C.count_threshold):C.trigger_type==="runtime"?!!(C.runtime_entity_id?.trim()&&C.runtime_threshold):!!(C.interval_value&&C.interval_type):!1,F1=C=>{if(!C){let i=new Date;return i.setHours(0,0,0,0),i.toISOString()}let[H,V,L]=C.split("T")[0].split("-"),M=Number(H),r=Number(V),e=Number(L);if(isNaN(M)||isNaN(r)||isNaN(e))return null;let t=new Date(M,r-1,e);return t.setHours(0,0,0,0),t.toISOString()},N5=C=>{let H=C.trigger_type==="count",V=C.trigger_type==="runtime";return{trigger_type:C.trigger_type||"time",interval_value:H||V?1:Number(C.interval_value),interval_type:H||V?"days":C.interval_type,count_entity_id:H&&C.count_entity_id?.trim()||null,count_threshold:H?Number(C.count_threshold):0,runtime_entity_id:V&&C.runtime_entity_id?.trim()||null,runtime_threshold:V?Number(C.runtime_threshold):0}},I5=(C,H)=>{let V=N5(C);return{title:C.title.trim(),interval_value:V.interval_value,interval_type:V.interval_type,trigger_type:V.trigger_type,last_performed:H,tag_id:C.tag?.trim()||void 0,icon:C.icon?.trim()||"mdi:calendar-check",labels:C.label??[],area_id:C.area?.trim()||void 0,description:C.description||void 0,group_id:C.group_id?.trim()||void 0,...V.count_entity_id?{count_entity_id:V.count_entity_id,count_threshold:V.count_threshold}:{},...V.runtime_entity_id?{runtime_entity_id:V.runtime_entity_id,runtime_threshold:V.runtime_threshold}:{}}},W5=(C,H)=>({title:C.title.trim(),...N5(C),last_performed:H,icon:C.icon?.trim()||"mdi:calendar-check",labels:C.label,tag_id:C.tag?.trim()||null,area_id:C.area?.trim()||null,description:C.description??"",group_id:C.group_id?.trim()||null});var z=class extends c{constructor(){super(...arguments);this.groups=[];this._formData=J();this._advancedOpen=!1;this._computeLabel=V=>{try{return A(`panel.cards.new.fields.${V.name}.heading`,this.hass.language)??V.name}catch{return V.name}};this._computeHelper=V=>{try{return A(`panel.cards.new.fields.${V.name}.helper`,this.hass.language)??""}catch{return""}}}async _handleAddTaskClick(){if(!R1(this._formData)){alert(A("panel.cards.new.alerts.required",this.hass.language));return}let V=F1(this._formData.last_performed);if(V===null){alert("Invalid date entered.");return}try{let L=this._formData.title.trim();await p5(this.hass,I5(this._formData,V)),this._formData=J(),this.dispatchEvent(new CustomEvent("task-added",{detail:{title:L},bubbles:!0,composed:!0}))}catch(L){console.error("Failed to add task:",L),alert(A("panel.cards.new.alerts.error",this.hass.language))}}_handleFormValueChanged(V){this._formData={...this._formData,...V.detail.value}}render(){return this.hass?p`
-            <ha-form
-                .hass=${this.hass}
-                .schema=${R5(this._formData,this.hass.language)}
-                .computeLabel=${this._computeLabel}
-                .computeHelper=${this._computeHelper}
-                .data=${this._formData}
-                @value-changed=${V=>this._handleFormValueChanged(V)}
-            ></ha-form>
+        `:p``}};w.styles=y,n([s()],w.prototype,"hass",2),n([s()],w.prototype,"narrow",2),n([s({attribute:!1})],w.prototype,"tasks",2),n([s({attribute:!1})],w.prototype,"groups",2),n([s({attribute:!1})],w.prototype,"registry",2),n([s({attribute:!1})],w.prototype,"labelRegistry",2);customElements.get("hm-task-table")||customElements.define("hm-task-table",w);var w5=["days","weeks","months"];function B5(C){return{days:A("intervals.days",C),weeks:A("intervals.weeks",C),months:A("intervals.months",C)}}var J=()=>({title:"",trigger_type:"time",interval_value:"",interval_type:"days",last_performed:"",icon:"",label:[],tag:"",count_entity_id:"",count_threshold:"",runtime_entity_id:"",runtime_threshold:"",area:"",description:"",group_id:""}),T5=(C,H,V)=>({title:C.title,trigger_type:C.trigger_type??"time",interval_value:C.interval_value,interval_type:C.interval_type,last_performed:C.last_performed??"",icon:C.icon??"",label:V.map(L=>L.label_id),tag:C.tag_id??"",count_entity_id:C.count_entity_id??"",count_threshold:C.count_threshold??"",runtime_entity_id:C.runtime_entity_id??"",runtime_threshold:C.runtime_threshold??"",area:H?.area_id??"",description:C.description??"",group_id:C.group_id??""}),m2=C=>({name:"",type:"grid",column_min_width:"170px",schema:C}),P5=C=>({name:"trigger_type",required:!0,selector:{select:{options:[{value:"time",label:A("trigger_types.time",C)},{value:"count",label:A("trigger_types.count",C)},{value:"runtime",label:A("trigger_types.runtime",C)}],mode:"dropdown"}}}),_5=(C,H)=>C.trigger_type==="count"?[{name:"count_entity_id",required:!0,selector:{entity:{}}},{name:"count_threshold",required:!0,selector:{number:{min:1,mode:"box"}}}]:C.trigger_type==="runtime"?[{name:"runtime_entity_id",required:!0,selector:{entity:{filter:{domain:"sensor"}}}},{name:"runtime_threshold",required:!0,selector:{number:{min:.1,step:.1,mode:"box"}}}]:[{name:"interval_value",required:!0,selector:{number:{min:1,mode:"box"}}},{name:"interval_type",required:!0,selector:{select:{options:w5.map(V=>({value:V,label:B5(H)[V]})),mode:"dropdown"}}}],p2=(C,H)=>({name:"group_id",selector:{select:{options:[{value:"",label:A("common.ungrouped",H)},...C.map(V=>({value:V,label:V}))],mode:"dropdown",custom_value:!0}}}),E5=(C,H,V)=>[m2([p2(H,V),{name:"icon",selector:{icon:{}}},{name:"tag",selector:{entity:{filter:{domain:"tag"}}}},{name:"area",selector:{area:{}}},{name:"label",selector:{label:{multiple:!0}}}]),{name:"description",selector:{text:C?{multiline:!0}:{}}}],R5=(C,H)=>[m2([{name:"title",required:!0,selector:{text:{}}},P5(H),..._5(C,H),{name:"last_performed",selector:{date:{}}}])],F5=(C,H)=>E5(!1,C,H),D5=(C,H,V)=>[m2([{name:"title",selector:{text:{}}},P5(H),..._5(C,H)]),{type:"constant",name:A("panel.dialog.edit_task.sections.optional",H),disabled:!0},...E5(!0,V,H)],R1=C=>C.title?.trim()?C.trigger_type==="count"?!!(C.count_entity_id?.trim()&&C.count_threshold):C.trigger_type==="runtime"?!!(C.runtime_entity_id?.trim()&&C.runtime_threshold):!!(C.interval_value&&C.interval_type):!1,F1=C=>{if(!C){let i=new Date;return i.setHours(0,0,0,0),i.toISOString()}let[H,V,L]=C.split("T")[0].split("-"),M=Number(H),r=Number(V),e=Number(L);if(isNaN(M)||isNaN(r)||isNaN(e))return null;let t=new Date(M,r-1,e);return t.setHours(0,0,0,0),t.toISOString()},N5=C=>{let H=C.trigger_type==="count",V=C.trigger_type==="runtime";return{trigger_type:C.trigger_type||"time",interval_value:H||V?1:Number(C.interval_value),interval_type:H||V?"days":C.interval_type,count_entity_id:H&&C.count_entity_id?.trim()||null,count_threshold:H?Number(C.count_threshold):0,runtime_entity_id:V&&C.runtime_entity_id?.trim()||null,runtime_threshold:V?Number(C.runtime_threshold):0}},I5=(C,H)=>{let V=N5(C);return{title:C.title.trim(),interval_value:V.interval_value,interval_type:V.interval_type,trigger_type:V.trigger_type,last_performed:H,tag_id:C.tag?.trim()||void 0,icon:C.icon?.trim()||"mdi:calendar-check",labels:C.label??[],area_id:C.area?.trim()||void 0,description:C.description||void 0,group_id:C.group_id?.trim()||void 0,...V.count_entity_id?{count_entity_id:V.count_entity_id,count_threshold:V.count_threshold}:{},...V.runtime_entity_id?{runtime_entity_id:V.runtime_entity_id,runtime_threshold:V.runtime_threshold}:{}}},W5=(C,H)=>({title:C.title.trim(),...N5(C),last_performed:H,icon:C.icon?.trim()||"mdi:calendar-check",labels:C.label,tag_id:C.tag?.trim()||null,area_id:C.area?.trim()||null,description:C.description??"",group_id:C.group_id?.trim()||null});var z=class extends c{constructor(){super(...arguments);this.groups=[];this._formData=J();this._advancedOpen=!1;this._computeLabel=V=>{try{return A(`panel.cards.new.fields.${V.name}.heading`,this.hass.language)??V.name}catch{return V.name}};this._computeHelper=V=>{try{return A(`panel.cards.new.fields.${V.name}.helper`,this.hass.language)??""}catch{return""}}}async _handleAddTaskClick(){if(!R1(this._formData)){alert(A("panel.cards.new.alerts.required",this.hass.language));return}let V=F1(this._formData.last_performed);if(V===null){alert("Invalid date entered.");return}try{let L=this._formData.title.trim();await p5(this.hass,I5(this._formData,V)),this._formData=J(),this.dispatchEvent(new CustomEvent("task-added",{detail:{title:L},bubbles:!0,composed:!0}))}catch(L){console.error("Failed to add task:",L),alert(A("panel.cards.new.alerts.error",this.hass.language))}}_handleFormValueChanged(V){this._formData={...this._formData,...V.detail.value}}render(){return this.hass?p`
+            <div class="basic-row">
+                <ha-form
+                    class="basic-form"
+                    .hass=${this.hass}
+                    .schema=${R5(this._formData,this.hass.language)}
+                    .computeLabel=${this._computeLabel}
+                    .computeHelper=${this._computeHelper}
+                    .data=${this._formData}
+                    @value-changed=${V=>this._handleFormValueChanged(V)}
+                ></ha-form>
+                <ha-button size="small" class="add-button"
+                    @click=${this._handleAddTaskClick}>${A("panel.cards.new.actions.add_task",this.hass.language)}
+                </ha-button>
+            </div>
 
             <ha-expansion-panel
                 header="${A("panel.cards.new.sections.optional",this.hass.language)}"
@@ -322,12 +346,6 @@ Try polyfilling it using "@formatjs/intl-pluralrules"
                     @value-changed=${V=>this._handleFormValueChanged(V)}
                 ></ha-form>
             </ha-expansion-panel>
-
-            <div class="form-field">
-                <ha-button size="small" class="add-button"
-                    @click=${this._handleAddTaskClick}>${A("panel.cards.new.actions.add_task",this.hass.language)}
-                </ha-button>
-            </div>
         `:p``}};z.styles=y,n([s()],z.prototype,"hass",2),n([s({attribute:!1})],z.prototype,"groups",2),n([h()],z.prototype,"_formData",2);customElements.get("hm-task-form")||customElements.define("hm-task-form",z);var B=class extends c{constructor(){super(...arguments);this.registry=[];this.labelRegistry=[];this.groups=[];this._taskId=null;this._formData=J();this._computeLabel=V=>{try{return A(`panel.dialog.edit_task.fields.${V.name}.heading`,this.hass.language)??V.name}catch{return V.name}};this._computeHelper=V=>{try{return A(`panel.dialog.edit_task.fields.${V.name}.helper`,this.hass.language)??""}catch{return""}}}async open(V){try{let L=await m5(this.hass,V),M=this.registry.find(e=>e.unique_id===L.id),r=M?this.labelRegistry.filter(e=>M.labels.includes(e.label_id)):[];this._formData=T5(L,M,r),this._taskId=L.id}catch(L){console.error("Failed to fetch task for edit:",L)}}async _handleSaveClick(){if(!this._taskId)return;if(!R1(this._formData)){alert(A("panel.cards.new.alerts.required",this.hass.language));return}let V=F1(this._formData.last_performed);if(V===null){alert("Invalid date entered.");return}try{await E1(this.hass,{task_id:this._taskId,updates:W5(this._formData,V)}),this._close()}catch(L){console.error("Failed to update task:",L)}}_close(){this._taskId=null,this._formData=J()}_handleFormValueChanged(V){this._formData={...this._formData,...V.detail.value}}render(){return!this.hass||!this._taskId?p``:p`
             <ha-dialog
                 open

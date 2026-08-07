@@ -74,14 +74,20 @@ class HMTaskForm extends LitElement {
         if (!this.hass) return html``;
 
         return html`
-            <ha-form
-                .hass=${this.hass}
-                .schema=${basicSchema(this._formData, this.hass.language)}
-                .computeLabel=${this._computeLabel}
-                .computeHelper=${this._computeHelper}
-                .data=${this._formData}
-                @value-changed=${(e: CustomEvent) => this._handleFormValueChanged(e)}
-            ></ha-form>
+            <div class="basic-row">
+                <ha-form
+                    class="basic-form"
+                    .hass=${this.hass}
+                    .schema=${basicSchema(this._formData, this.hass.language)}
+                    .computeLabel=${this._computeLabel}
+                    .computeHelper=${this._computeHelper}
+                    .data=${this._formData}
+                    @value-changed=${(e: CustomEvent) => this._handleFormValueChanged(e)}
+                ></ha-form>
+                <ha-button size="small" class="add-button"
+                    @click=${this._handleAddTaskClick}>${localize('panel.cards.new.actions.add_task', this.hass.language)}
+                </ha-button>
+            </div>
 
             <ha-expansion-panel
                 header="${localize('panel.cards.new.sections.optional', this.hass.language)}"
@@ -98,12 +104,6 @@ class HMTaskForm extends LitElement {
                     @value-changed=${(e: CustomEvent) => this._handleFormValueChanged(e)}
                 ></ha-form>
             </ha-expansion-panel>
-
-            <div class="form-field">
-                <ha-button size="small" class="add-button"
-                    @click=${this._handleAddTaskClick}>${localize('panel.cards.new.actions.add_task', this.hass.language)}
-                </ha-button>
-            </div>
         `;
     }
 
