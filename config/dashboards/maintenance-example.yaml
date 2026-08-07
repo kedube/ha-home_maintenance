@@ -1,0 +1,60 @@
+# Example dashboard for the Home Maintenance integration, loaded by the
+# development environment (scripts/develop) via configuration.yaml.
+# Documented copy: docs/example-dashboard.md — keep the two in sync.
+views:
+  - title: Home Maintenance
+    path: maintenance
+    icon: mdi:hammer-wrench
+    type: sections
+    max_columns: 3
+    sections:
+      # ── Everything, searchable ────────────────────────────────────────
+      - type: grid
+        cards:
+          - type: heading
+            heading: All tasks
+            icon: mdi:hammer-wrench
+          - type: custom:home-maintenance-todo-card
+            title: Home Maintenance
+            due_soon_days: 14
+            show_search: true
+
+      # ── At a glance ───────────────────────────────────────────────────
+      - type: grid
+        cards:
+          - type: heading
+            heading: At a glance
+            icon: mdi:clipboard-check-outline
+          - type: markdown
+            content: >-
+              {% set tasks = states.binary_sensor
+                 | selectattr('attributes.trigger_type', 'defined') | list %}
+              {% set due = tasks | selectattr('state', 'eq', 'on') | list %}
+              {% if due %}
+              ⚠️ **{{ due | count }} of {{ tasks | count }} tasks due**
+
+              {% for t in due %}
+              - {{ t.name }}
+              {% endfor %}
+              {% else %}
+              ✅ All {{ tasks | count }} tasks are up to date.
+              {% endif %}
+          - type: custom:home-maintenance-todo-card
+            due_soon_days: 7
+            max_items: 5
+            show_search: false
+
+      # ── One card per group ────────────────────────────────────────────
+      - type: grid
+        cards:
+          - type: heading
+            heading: By area
+            icon: mdi:folder-home-outline
+          - type: custom:home-maintenance-todo-card
+            title: Kitchen
+            group: Kitchen
+            show_search: false
+          - type: custom:home-maintenance-todo-card
+            title: Outdoors
+            group: Outdoors
+            show_search: false

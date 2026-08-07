@@ -128,7 +128,9 @@ max_items: 0                 # cap the list (0 = no limit)
 show_search: true            # search box + group filter
 ```
 
-The card updates live over the same push channel as the panel, and its header links back to the full panel for editing.
+The card updates live over the same push channel as the panel, and its header links back to the full panel for editing. Set `group: Kitchen` to pin a card to a single [task group](#task-groups) (this hides the group dropdown) — handy for one card per room or system.
+
+For a complete view combining the card with templated summaries and core cards, see the [example dashboard](docs/example-dashboard.md).
 
 ## Entities
 

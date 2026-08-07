@@ -10,3 +10,13 @@ logger:
   default: info
   logs:
     custom_components: debug
+
+# Example dashboard showcasing the integration (docs/example-dashboard.md)
+lovelace:
+  dashboards:
+    maintenance-example:
+      mode: yaml
+      title: Maintenance Example
+      icon: mdi:hammer-wrench
+      show_in_sidebar: true
+      filename: dashboards/maintenance-example.yaml

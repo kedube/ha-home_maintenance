@@ -34,6 +34,8 @@ interface CardConfig {
     due_soon_days?: number;
     max_items?: number;
     show_search?: boolean;
+    /** Pin the card to one group; hides the group dropdown. */
+    group?: string;
 }
 
 const DEFAULT_CONFIG: CardConfig = {
@@ -167,8 +169,9 @@ class HomeMaintenanceTodoCard extends LitElement {
             );
         }
 
-        if (this._groupFilter) {
-            tasks = tasks.filter((t) => (t.raw.group_id?.trim() || "") === this._groupFilter);
+        const groupFilter = this._config.group?.trim() || this._groupFilter;
+        if (groupFilter) {
+            tasks = tasks.filter((t) => (t.raw.group_id?.trim() || "") === groupFilter);
         }
 
         return tasks;
@@ -316,7 +319,7 @@ class HomeMaintenanceTodoCard extends LitElement {
                                 </ha-icon-button>
                             ` : nothing}
                         </div>
-                        ${this._groups.length > 0 ? html`
+                        ${this._groups.length > 0 && !this._config.group?.trim() ? html`
                             <select
                                 class="group-filter"
                                 .value=${this._groupFilter}
@@ -825,6 +828,13 @@ class HomeMaintenanceTodoCardEditor extends LitElement {
                     type="number"
                     .value=${String(this._config.max_items ?? 0)}
                     @input=${(e: any) => this._valueChanged("max_items", parseInt(e.target.value) || 0)}
+                    style="width: 100%; margin-bottom: 12px;"
+                ></ha-textfield>
+
+                <ha-textfield
+                    label="Group (show only this group's tasks)"
+                    .value=${this._config.group ?? ""}
+                    @input=${(e: any) => this._valueChanged("group", e.target.value)}
                     style="width: 100%; margin-bottom: 12px;"
                 ></ha-textfield>
 

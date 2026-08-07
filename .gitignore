@@ -21,5 +21,6 @@ coverage.xml
 # Home Assistant configuration
 config/*
 !config/configuration.yaml
+!config/dashboards/
 .venv*
 .DS_Store

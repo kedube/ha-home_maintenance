@@ -4,6 +4,13 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
+## Unreleased
+
+- Todo card: new `group` option pins a card to a single task group and hides
+  the group dropdown — one card per room or system
+- Example dashboard: documented copy-paste view in `docs/example-dashboard.md`,
+  also loaded as a live dashboard in the development environment
+
 ## 1.5.8 — 2026-08-07
 
 - Task groups: organize tasks into named groups. The panel gains a Groups
