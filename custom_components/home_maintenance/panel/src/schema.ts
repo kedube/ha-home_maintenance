@@ -113,41 +113,35 @@ export const groupSelector = (groups: string[], lang: string) => ({
     },
 });
 
-const optionalFields = (multilineDescription: boolean, groups: string[], lang: string): any[] => [
-    grid([
-        groupSelector(groups, lang),
-        { name: "icon", selector: { icon: {} }, },
-        { name: "tag", selector: { entity: { filter: { domain: "tag" } } }, },
-        { name: "area", selector: { area: {} }, },
-        { name: "label", selector: { label: { multiple: true } }, },
-    ]),
-    { name: "description", selector: { text: multilineDescription ? { multiline: true } : {} } },
-];
-
 /**
- * Main task fields on one grid line (wraps on narrow screens):
- * title | trigger type | the trigger's two fields | last performed.
+ * Main task fields, rendered on one line in the add form (wraps on narrow
+ * screens): title | trigger type | the trigger's two fields | last performed.
  */
-export const basicSchema = (formData: TaskFormData, lang: string): any[] => [
-    grid([
-        { name: "title", required: true, selector: { text: {} }, },
-        triggerTypeSelector(lang),
-        ...triggerFields(formData, lang),
-        { name: "last_performed", selector: { date: {} }, },
-    ]),
+export const basicFields = (formData: TaskFormData, lang: string): any[] => [
+    { name: "title", required: true, selector: { text: {} }, },
+    triggerTypeSelector(lang),
+    ...triggerFields(formData, lang),
+    { name: "last_performed", selector: { date: {} }, },
 ];
 
-export const advancedSchema = (groups: string[], lang: string): any[] =>
-    optionalFields(false, groups, lang);
+/** Optional fields, rendered left-to-right on the expansion panel's line. */
+export const optionalFieldList = (groups: string[], lang: string): any[] => [
+    groupSelector(groups, lang),
+    { name: "icon", selector: { icon: {} }, },
+    { name: "tag", selector: { entity: { filter: { domain: "tag" } } }, },
+    { name: "area", selector: { area: {} }, },
+    { name: "label", selector: { label: { multiple: true } }, },
+];
+
+export const descriptionField = (multiline: boolean) => (
+    { name: "description", selector: { text: multiline ? { multiline: true } : {} } }
+);
 
 export const editSchema = (formData: TaskFormData, lang: string, groups: string[]): any[] => [
-    grid([
-        { name: "title", selector: { text: {} }, },
-        triggerTypeSelector(lang),
-        ...triggerFields(formData, lang),
-    ]),
+    grid(basicFields(formData, lang)),
     { type: "constant", name: localize('panel.dialog.edit_task.sections.optional', lang), disabled: true },
-    ...optionalFields(true, groups, lang),
+    grid(optionalFieldList(groups, lang)),
+    descriptionField(true),
 ];
 
 /** Validate required fields per trigger type. Returns true when valid. */

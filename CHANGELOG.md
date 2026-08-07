@@ -4,6 +4,13 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
+## Unreleased
+
+- Create New Task form: all fields now render with a uniform label above the
+  input, so fields line up horizontally regardless of selector style (the
+  Tag and Label(s) pickers previously drew their own label above the input,
+  pushing it lower than the neighboring fields).
+
 ## 1.5.13 — 2026-08-07
 
 - Compact task forms, restoring the density of the original design while

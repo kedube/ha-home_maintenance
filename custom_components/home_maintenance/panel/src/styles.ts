@@ -65,14 +65,10 @@ export const commonStyle = css`
         gap: 12px;
     }
 
-    .basic-row .basic-form {
-        flex: 1 1 500px;
-        min-width: 0;
-    }
-
     .basic-row .add-button {
         flex-shrink: 0;
-        margin-top: 10px;
+        /* Vertically center the button on the input row (below field labels). */
+        margin-top: 30px;
         margin-left: auto;
     }
 
