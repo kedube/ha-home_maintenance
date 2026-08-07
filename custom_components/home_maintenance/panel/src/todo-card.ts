@@ -1,8 +1,11 @@
 import { LitElement, html, css, nothing, TemplateResult } from "lit";
-import { property, state } from "lit/decorators.js";
+import { property, query, state } from "lit/decorators.js";
 import type { HomeAssistant } from "custom-card-helpers";
 import { formatDateNumeric } from "custom-card-helpers";
 
+import { localize } from '../localize/localize';
+import { loadConfigDashboard } from './helpers';
+import { showToast } from './toast';
 import { Task } from './types';
 import {
     completeTask,
@@ -11,6 +14,8 @@ import {
     removeTask,
     subscribeUpdates,
 } from './data/websockets';
+import './components/confirm-dialog';
+import type { HMConfirmDialog } from './components/confirm-dialog';
 
 /**
  * A Lovelace card that mirrors the Home Maintenance panel: tasks bucketed
@@ -57,6 +62,8 @@ class HomeMaintenanceTodoCard extends LitElement {
     @state() private _searchQuery = "";
     @state() private _groupFilter = "";
 
+    @query('hm-confirm-dialog') private _confirmDialog?: HMConfirmDialog;
+
     private _unsubscribe?: () => Promise<void>;
     private _reloadTimer?: ReturnType<typeof setTimeout>;
     private _initialized = false;
@@ -93,6 +100,9 @@ class HomeMaintenanceTodoCard extends LitElement {
     }
 
     private async _initialize() {
+        // Dashboards don't ship ha-dialog by default; load the config
+        // panel's components so the confirmation dialogs can render.
+        await loadConfigDashboard();
         await this._loadData();
         try {
             this._unsubscribe = await subscribeUpdates(this.hass!, () => this._scheduleReload());
@@ -221,19 +231,31 @@ class HomeMaintenanceTodoCard extends LitElement {
 
     // --- Actions ---
 
-    private async _completeTask(task: Task) {
+    private _completeTask(task: Task) {
         if (this._completing.has(task.id)) return;
-        if (!confirm(`Mark "${task.title}" as complete?`)) return;
+        const lang = this.hass!.language;
+        this._confirmDialog?.open({
+            heading: localize('panel.dialog.confirm_complete.title', lang),
+            message: localize('panel.dialog.confirm_complete.message_simple', lang, '{title}', task.title),
+            confirmLabel: localize('panel.dialog.confirm_complete.actions.confirm', lang),
+            cancelLabel: localize('common.cancel', lang),
+            onConfirm: () => this._doCompleteTask(task),
+        });
+    }
 
+    private async _doCompleteTask(task: Task) {
         const next = new Set(this._completing);
         next.add(task.id);
         this._completing = next;
 
+        const lang = this.hass!.language;
         try {
             await completeTask(this.hass!, task.id);
             await this._loadData();
+            showToast(this, localize('panel.cards.current.alerts.complete_success', lang, '{title}', task.title));
         } catch (e) {
             console.error("Failed to complete task:", e);
+            showToast(this, localize('panel.cards.current.alerts.complete_error', lang));
         }
 
         const after = new Set(this._completing);
@@ -241,13 +263,26 @@ class HomeMaintenanceTodoCard extends LitElement {
         this._completing = after;
     }
 
-    private async _removeTask(taskId: string) {
-        if (!confirm("Remove this task?")) return;
+    private _removeTask(taskId: string) {
+        const lang = this.hass!.language;
+        const task = this._tasks.find((t) => t.id === taskId);
+        this._confirmDialog?.open({
+            heading: localize('panel.dialog.confirm_remove.title', lang),
+            message: localize('panel.dialog.confirm_remove.message', lang, '{title}', task?.title ?? ''),
+            confirmLabel: localize('panel.dialog.confirm_remove.actions.confirm', lang),
+            cancelLabel: localize('common.cancel', lang),
+            destructive: true,
+            onConfirm: () => this._doRemoveTask(taskId),
+        });
+    }
+
+    private async _doRemoveTask(taskId: string) {
         try {
             await removeTask(this.hass!, taskId);
             await this._loadData();
         } catch (e) {
             console.error("Failed to remove task:", e);
+            showToast(this, localize('panel.cards.current.alerts.remove_error', this.hass!.language));
         }
     }
 
@@ -367,6 +402,8 @@ class HomeMaintenanceTodoCard extends LitElement {
                     ` : nothing}
                 </div>
             </ha-card>
+
+            <hm-confirm-dialog></hm-confirm-dialog>
         `;
     }
 

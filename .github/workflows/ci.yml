@@ -120,6 +120,48 @@ jobs:
       - name: Run tests against HA next
         run: python -m pytest -q
 
+      - name: Install playwright
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Browser smoke test against HA next
+        run: python scripts/e2e_smoke.py
+
+  # The only check that exercises the real frontend: boots HA, logs in with
+  # a browser, adds a task, and creates a group. Catches component removals
+  # and rendering regressions that pytest structurally cannot see.
+  smoke:
+    name: Browser smoke test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install Home Assistant and playwright
+        run: pip install homeassistant colorlog playwright
+
+      - name: Install chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run browser smoke test
+        run: python scripts/e2e_smoke.py
+
+      - name: Upload panel screenshot
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: smoke-panel-screenshot
+          path: /tmp/hm_smoke_panel.png
+          if-no-files-found: ignore
+
   frontend:
     name: Panel build
     runs-on: ubuntu-latest
@@ -141,6 +183,17 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # Home Assistant is removing its legacy (Material Web Components era)
+      # elements release by release; each removal silently blanks whatever
+      # still renders one (mwc-button in #122, ha-textfield in 1.5.16).
+      # Keep them out of the sources for good.
+      - name: Forbid legacy HA components
+        run: |
+          if grep -rnE '<(mwc-[a-z-]+|ha-textfield|ha-formfield|paper-[a-z-]+|ha-md-[a-z-]+)' src/; then
+            echo "::error::Legacy Home Assistant components found (see above). Use ha-selector / ha-form / ha-button instead."
+            exit 1
+          fi
 
       - name: Type check
         run: npx tsc --noEmit

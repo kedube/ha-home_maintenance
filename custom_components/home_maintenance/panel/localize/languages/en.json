@@ -3,7 +3,9 @@
         "loading": "Loading...",
         "none": "None",
         "no_tasks": "No tasks found.",
-        "ungrouped": "Ungrouped"
+        "ungrouped": "Ungrouped",
+        "cancel": "Cancel",
+        "invalid_date": "Invalid date entered."
     },
     "intervals": {
         "day": "Day",
@@ -102,7 +104,8 @@
                 "confirm_remove": "Are you sure you want to remove this task?",
                 "alerts": {
                     "complete_success": "\"{title}\" marked complete. The next due date was recalculated.",
-                    "complete_error": "Failed to mark task complete. See console for details."
+                    "complete_error": "Failed to mark task complete. See console for details.",
+                    "remove_error": "Failed to remove the task. See console for details."
                 }
             },
             "groups": {
@@ -122,8 +125,12 @@
                 "empty": "No groups yet. Create one to organize your tasks.",
                 "confirm_delete": "Delete group \"{title}\"? Its tasks move to Ungrouped.",
                 "alerts": {
-                    "error": "Failed to create the group. Check the browser console and Home Assistant logs."
-                }
+                    "error": "Failed to create the group. Check the browser console and Home Assistant logs.",
+                    "exists": "Group \"{title}\" already exists.",
+                    "rename_error": "Failed to rename the group. See console for details.",
+                    "delete_error": "Failed to delete the group. See console for details."
+                },
+                "confirm_delete_title": "Delete Group"
             }
         },
         "dialog": {
@@ -184,6 +191,9 @@
                 "actions": {
                     "cancel": "Cancel",
                     "save": "Save"
+                },
+                "alerts": {
+                    "error": "Failed to save changes. See console for details."
                 }
             },
             "move_task": {
@@ -205,6 +215,14 @@
                 "actions": {
                     "cancel": "Cancel",
                     "confirm": "Mark Complete"
+                },
+                "message_simple": "Mark \"{title}\" as complete? Progress will start over and the next due date will be recalculated."
+            },
+            "confirm_remove": {
+                "title": "Remove Task",
+                "message": "Remove \"{title}\"? This cannot be undone.",
+                "actions": {
+                    "confirm": "Remove"
                 }
             }
         }

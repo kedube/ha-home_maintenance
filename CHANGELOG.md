@@ -4,6 +4,31 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
+## Unreleased
+
+- HA-native feedback everywhere: all browser-native alert()/confirm()
+  dialogs (which look foreign and can be silently suppressed by the
+  companion apps) are replaced with toast notifications and a shared
+  ha-dialog confirmation — task removal, group deletion, task completion in
+  the todo card, and all validation/error messages. Adding a task from the
+  panel now shows a confirmation toast, and creating a group that already
+  exists says so instead of silently clearing the field.
+- Edit dialog fields now use the same uniform label-above-input rendering
+  as the add form, so all inputs line up.
+- Browser smoke test (scripts/e2e_smoke.py + CI job): boots a throwaway
+  Home Assistant, logs in with a headless browser, adds a task, and creates
+  a group — catching frontend component removals that pytest cannot see.
+  Also runs against HA pre-releases in the weekly HA-next job.
+- CI now fails if legacy Home Assistant components (mwc-*, ha-textfield,
+  ha-formfield, ha-md-*, paper-*) reappear in the panel sources.
+- Faster panel loads: static bundles are served with long-lived cache
+  headers, safe now that URLs are version-stamped.
+- scripts/develop now launches Home Assistant via the venv's python -m
+  homeassistant, surviving repository moves/renames that break entrypoint
+  shebangs.
+- Fresh README panel screenshot reflecting the redesigned single-column
+  layout.
+
 ## 1.5.16 — 2026-08-07
 
 - Fixed: the Groups card's name fields did not render on Home Assistant

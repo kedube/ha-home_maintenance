@@ -1,21 +1,28 @@
-import { LitElement, html } from "lit";
+import { LitElement, html, css } from "lit";
 import { property, state } from "lit/decorators.js";
 import type { HomeAssistant } from "custom-card-helpers";
 
 import { localize } from '../../localize/localize';
 import { commonStyle } from '../styles';
+import { showToast } from '../toast';
 import { loadTask, updateTask } from '../data/websockets';
 import {
+    basicFields,
     computeISODate,
-    editSchema,
+    descriptionField,
     emptyTaskFormData,
+    optionalFieldList,
     taskFormToUpdates,
     taskToFormData,
     validateTaskForm,
 } from '../schema';
 import { EntityRegistryEntry, Label, TaskFormData } from '../types';
 
-/** The edit-task dialog. Call open(taskId) to load a task and show it. */
+/**
+ * The edit-task dialog. Call open(taskId) to load a task and show it.
+ * Fields render as bare ha-selectors with a uniform label above each one
+ * (matching hm-task-form), so inputs line up regardless of selector style.
+ */
 class HMEditDialog extends LitElement {
     @property() hass?: HomeAssistant;
     @property({ attribute: false }) registry: EntityRegistryEntry[] = [];
@@ -59,13 +66,13 @@ class HMEditDialog extends LitElement {
         if (!this._taskId) return;
 
         if (!validateTaskForm(this._formData)) {
-            alert(localize("panel.cards.new.alerts.required", this.hass!.language));
+            showToast(this, localize("panel.cards.new.alerts.required", this.hass!.language));
             return;
         }
 
         const lastPerformedISO = computeISODate(this._formData.last_performed);
         if (lastPerformedISO === null) {
-            alert("Invalid date entered.");
+            showToast(this, localize("common.invalid_date", this.hass!.language));
             return;
         }
 
@@ -77,6 +84,7 @@ class HMEditDialog extends LitElement {
             this._close();
         } catch (e) {
             console.error("Failed to update task:", e);
+            showToast(this, localize('panel.dialog.edit_task.alerts.error', this.hass!.language));
         }
     }
 
@@ -85,43 +93,97 @@ class HMEditDialog extends LitElement {
         this._formData = emptyTaskFormData();
     }
 
-    private _handleFormValueChanged(ev: CustomEvent) {
-        this._formData = { ...this._formData, ...ev.detail.value };
+    private _handleFieldChanged(name: string, ev: CustomEvent) {
+        ev.stopPropagation();
+        this._formData = { ...this._formData, [name]: ev.detail.value };
     }
+
+    private _renderField = (field: any) => html`
+        <div class="field ${field.name}">
+            <div class="field-label">
+                ${this._computeLabel(field)}${field.required ? " *" : ""}
+            </div>
+            <ha-selector
+                .hass=${this.hass}
+                .selector=${field.selector}
+                .value=${(this._formData as any)[field.name]}
+                .helper=${this._computeHelper(field)}
+                .required=${field.required ?? false}
+                @value-changed=${(e: CustomEvent) => this._handleFieldChanged(field.name, e)}
+            ></ha-selector>
+        </div>
+    `;
 
     render() {
         if (!this.hass || !this._taskId) return html``;
+        const lang = this.hass.language;
 
         return html`
             <ha-dialog
                 open
-                heading="${localize('panel.dialog.edit_task.title', this.hass.language)}: ${this._formData.title}"
+                heading="${localize('panel.dialog.edit_task.title', lang)}: ${this._formData.title}"
                 prevent-scrim-close
                 @closed=${this._close}
             >
-                <ha-form
-                    autofocus
-                    .hass=${this.hass}
-                    .schema=${editSchema(this._formData, this.hass.language, this.groups)}
-                    .computeLabel=${this._computeLabel}
-                    .computeHelper=${this._computeHelper}
-                    .data=${this._formData}
-                    @value-changed=${(e: CustomEvent) => this._handleFormValueChanged(e)}
-                ></ha-form>
+                <div class="fields-grid">
+                    ${basicFields(this._formData, lang).map(this._renderField)}
+                </div>
+
+                <div class="section-label">
+                    ${localize('panel.dialog.edit_task.sections.optional', lang)}
+                </div>
+
+                <div class="fields-grid">
+                    ${optionalFieldList(this.groups, lang).map(this._renderField)}
+                    ${this._renderField(descriptionField(true))}
+                </div>
 
                 <ha-dialog-footer slot="footer">
                     <ha-button data-dialog="close" appearance="plain" slot="secondaryAction">
-                        ${localize('panel.dialog.edit_task.actions.cancel', this.hass.language)}
+                        ${localize('panel.dialog.edit_task.actions.cancel', lang)}
                     </ha-button>
                     <ha-button slot="primaryAction" @click=${this._handleSaveClick}>
-                        ${localize('panel.dialog.edit_task.actions.save', this.hass.language)}
+                        ${localize('panel.dialog.edit_task.actions.save', lang)}
                     </ha-button>
                 </ha-dialog-footer>
             </ha-dialog>
         `;
     }
 
-    static styles = commonStyle;
+    static styles = [commonStyle, css`
+        .fields-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            column-gap: 8px;
+            row-gap: 16px;
+            align-items: start;
+        }
+
+        .field-label {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--secondary-text-color);
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .field ha-selector {
+            display: block;
+            width: 100%;
+        }
+
+        .field.description {
+            grid-column: 1 / -1;
+        }
+
+        .section-label {
+            font-weight: 500;
+            color: var(--secondary-text-color);
+            margin: 20px 0 12px;
+        }
+    `];
 }
 
 if (!customElements.get('hm-edit-dialog')) customElements.define('hm-edit-dialog', HMEditDialog)

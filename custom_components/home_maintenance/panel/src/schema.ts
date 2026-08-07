@@ -41,17 +41,6 @@ export const taskToFormData = (
     group_id: task.group_id ?? "",
 });
 
-/**
- * Responsive multi-column layout section: fits as many fields per line as
- * the container allows (all five on a wide card, fewer on narrow screens).
- */
-const grid = (schema: any[]) => ({
-    name: "",
-    type: "grid",
-    column_min_width: "170px",
-    schema,
-});
-
 const triggerTypeSelector = (lang: string) => ({
     name: "trigger_type",
     required: true,
@@ -136,13 +125,6 @@ export const optionalFieldList = (groups: string[], lang: string): any[] => [
 export const descriptionField = (multiline: boolean) => (
     { name: "description", selector: { text: multiline ? { multiline: true } : {} } }
 );
-
-export const editSchema = (formData: TaskFormData, lang: string, groups: string[]): any[] => [
-    grid(basicFields(formData, lang)),
-    { type: "constant", name: localize('panel.dialog.edit_task.sections.optional', lang), disabled: true },
-    grid(optionalFieldList(groups, lang)),
-    descriptionField(true),
-];
 
 /** Validate required fields per trigger type. Returns true when valid. */
 export const validateTaskForm = (data: TaskFormData): boolean => {

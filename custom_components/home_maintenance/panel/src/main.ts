@@ -4,6 +4,7 @@ import type { HomeAssistant } from "custom-card-helpers";
 
 import { localize } from '../localize/localize';
 import { loadConfigDashboard } from "./helpers";
+import { showToast } from './toast';
 import { commonStyle } from './styles'
 import { EntityRegistryEntry, IntegrationConfig, Label, Task, Tag } from './types';
 import {
@@ -22,9 +23,11 @@ import './components/edit-dialog'
 import './components/group-manager'
 import './components/move-dialog'
 import './components/confirm-complete-dialog'
+import './components/confirm-dialog'
 import type { HMEditDialog } from './components/edit-dialog'
 import type { HMMoveDialog } from './components/move-dialog'
 import type { HMConfirmCompleteDialog } from './components/confirm-complete-dialog'
+import type { HMConfirmDialog } from './components/confirm-dialog'
 
 const RELOAD_DEBOUNCE_MS = 300;
 
@@ -46,6 +49,7 @@ export class HomeMaintenancePanel extends LitElement {
     @query('hm-edit-dialog') private _editDialog?: HMEditDialog;
     @query('hm-move-dialog') private _moveDialog?: HMMoveDialog;
     @query('hm-confirm-complete-dialog') private _confirmCompleteDialog?: HMConfirmCompleteDialog;
+    @query('hm-confirm-dialog') private _confirmDialog?: HMConfirmDialog;
 
     private _unsubscribe?: () => Promise<void>;
     private _reloadTimer?: ReturnType<typeof setTimeout>;
@@ -116,14 +120,33 @@ export class HomeMaintenancePanel extends LitElement {
         }
     }
 
-    private async _handleRemove(taskId: string) {
-        const msg = localize('panel.cards.current.confirm_remove', this.hass!.language)
-        if (!confirm(msg)) return;
+    private _handleRemove(taskId: string) {
+        const lang = this.hass!.language;
+        const task = this.tasks.find((t) => t.id === taskId);
+        this._confirmDialog?.open({
+            heading: localize('panel.dialog.confirm_remove.title', lang),
+            message: localize('panel.dialog.confirm_remove.message', lang, '{title}', task?.title ?? ''),
+            confirmLabel: localize('panel.dialog.confirm_remove.actions.confirm', lang),
+            cancelLabel: localize('common.cancel', lang),
+            destructive: true,
+            onConfirm: () => this._removeTask(taskId),
+        });
+    }
+
+    private async _removeTask(taskId: string) {
         try {
             await removeTask(this.hass!, taskId);
         } catch (e) {
             console.error("Failed to remove task:", e);
+            showToast(this, localize('panel.cards.current.alerts.remove_error', this.hass!.language));
         }
+    }
+
+    private _handleTaskAdded(e: CustomEvent) {
+        showToast(this, localize(
+            'card.add_task.added', this.hass!.language,
+            '{title}', e.detail?.title ?? '',
+        ));
     }
 
     render() {
@@ -152,7 +175,11 @@ export class HomeMaintenancePanel extends LitElement {
                     class="card-new"
                 >
                     <div class="card-content">
-                        <hm-task-form .hass=${this.hass} .groups=${this.groups}></hm-task-form>
+                        <hm-task-form
+                            .hass=${this.hass}
+                            .groups=${this.groups}
+                            @task-added=${this._handleTaskAdded}
+                        ></hm-task-form>
                     </div>
                 </ha-card>
 
@@ -192,6 +219,7 @@ export class HomeMaintenancePanel extends LitElement {
             ></hm-edit-dialog>
             <hm-move-dialog .hass=${this.hass} .groups=${this.groups}></hm-move-dialog>
             <hm-confirm-complete-dialog .hass=${this.hass}></hm-confirm-complete-dialog>
+            <hm-confirm-dialog></hm-confirm-dialog>
         `;
     }
 

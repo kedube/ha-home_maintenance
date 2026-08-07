@@ -3,7 +3,9 @@
         "loading": "Wird geladen...",
         "none": "Keine",
         "no_tasks": "Keine Aufgaben gefunden.",
-        "ungrouped": "Ohne Gruppe"
+        "ungrouped": "Ohne Gruppe",
+        "cancel": "Abbrechen",
+        "invalid_date": "Ungültiges Datum eingegeben."
     },
     "intervals": {
         "day": "Tag",
@@ -102,7 +104,8 @@
                 "confirm_remove": "Sind Sie sicher, dass Sie diese Aufgabe entfernen möchten?",
                 "alerts": {
                     "complete_success": "\"{title}\" wurde als erledigt markiert. Das nächste Fälligkeitsdatum wurde neu berechnet.",
-                    "complete_error": "Aufgabe konnte nicht als erledigt markiert werden. Details siehe Konsole."
+                    "complete_error": "Aufgabe konnte nicht als erledigt markiert werden. Details siehe Konsole.",
+                    "remove_error": "Aufgabe konnte nicht entfernt werden. Details in der Konsole."
                 }
             },
             "groups": {
@@ -122,8 +125,12 @@
                 "empty": "Noch keine Gruppen. Erstellen Sie eine, um Aufgaben zu organisieren.",
                 "confirm_delete": "Gruppe \"{title}\" löschen? Ihre Aufgaben werden in \"Ohne Gruppe\" verschoben.",
                 "alerts": {
-                    "error": "Gruppe konnte nicht erstellt werden. Prüfen Sie die Browserkonsole und die Home-Assistant-Protokolle."
-                }
+                    "error": "Gruppe konnte nicht erstellt werden. Prüfen Sie die Browserkonsole und die Home-Assistant-Protokolle.",
+                    "exists": "Gruppe \"{title}\" existiert bereits.",
+                    "rename_error": "Gruppe konnte nicht umbenannt werden. Details in der Konsole.",
+                    "delete_error": "Gruppe konnte nicht gelöscht werden. Details in der Konsole."
+                },
+                "confirm_delete_title": "Gruppe löschen"
             }
         },
         "dialog": {
@@ -184,6 +191,9 @@
                 "actions": {
                     "cancel": "Abbrechen",
                     "save": "Speichern"
+                },
+                "alerts": {
+                    "error": "Änderungen konnten nicht gespeichert werden. Details in der Konsole."
                 }
             },
             "move_task": {
@@ -205,6 +215,14 @@
                 "actions": {
                     "cancel": "Abbrechen",
                     "confirm": "Als erledigt markieren"
+                },
+                "message_simple": "\"{title}\" als erledigt markieren? Der Fortschritt beginnt von vorn und das nächste Fälligkeitsdatum wird neu berechnet."
+            },
+            "confirm_remove": {
+                "title": "Aufgabe entfernen",
+                "message": "\"{title}\" entfernen? Dies kann nicht rückgängig gemacht werden.",
+                "actions": {
+                    "confirm": "Entfernen"
                 }
             }
         }

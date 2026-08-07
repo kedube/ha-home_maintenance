@@ -35,6 +35,14 @@ ignore = [
     "T201", # print is the scripts' output interface
     "PLR2004", # sys.argv length checks
 ]
+"scripts/*" = [
+    "INP001", # standalone CLI scripts, not a package
+    "T201", # print is the scripts' output interface
+    "S105", # throwaway test credentials for a local smoke instance
+    "S108", # screenshots land in /tmp for CI artifact upload
+    "S310", # requests go to the local smoke instance over http
+    "S603", # subprocess with fixed args launches the local HA
+]
 
 [lint.flake8-pytest-style]
 fixture-parentheses = false

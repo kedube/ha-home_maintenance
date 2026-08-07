@@ -7,16 +7,18 @@ CC_SRC="${PWD}/custom_components"
 CC_DST="${CONFIG_DIR}/custom_components"
 VENV_DIR="${PWD}/.venv"
 
-if [[ -f "${VENV_DIR}/bin/activate" ]]; then
-    source "${VENV_DIR}/bin/activate"
-else
+if [[ ! -x "${VENV_DIR}/bin/python" ]]; then
     echo "ERROR: venv not found at ${VENV_DIR}"
     exit 1
 fi
 
+# Invoke via the venv python rather than the hass entrypoint: entrypoint
+# shebangs embed the venv's absolute path and break if the repo is moved.
+HASS=("${VENV_DIR}/bin/python" -m homeassistant)
+
 if [[ ! -d "${CONFIG_DIR}" ]]; then
     mkdir -p "${CONFIG_DIR}"
-    hass --config "${CONFIG_DIR}" --script ensure_config
+    "${HASS[@]}" --config "${CONFIG_DIR}" --script ensure_config
 fi
 
 if [[ -L "${CC_DST}" ]]; then
@@ -30,4 +32,4 @@ fi
 
 export PYTHONPATH="${PYTHONPATH}:${CC_SRC}"
 
-hass --config "${CONFIG_DIR}" --debug
+"${HASS[@]}" --config "${CONFIG_DIR}" --debug

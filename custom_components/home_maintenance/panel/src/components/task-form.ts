@@ -4,6 +4,7 @@ import type { HomeAssistant } from "custom-card-helpers";
 
 import { localize } from '../../localize/localize';
 import { commonStyle } from '../styles';
+import { showToast } from '../toast';
 import { saveTask } from '../data/websockets';
 import {
     basicFields,
@@ -48,13 +49,13 @@ class HMTaskForm extends LitElement {
 
     private async _handleAddTaskClick() {
         if (!validateTaskForm(this._formData)) {
-            alert(localize("panel.cards.new.alerts.required", this.hass!.language));
+            showToast(this, localize("panel.cards.new.alerts.required", this.hass!.language));
             return;
         }
 
         const lastPerformedISO = computeISODate(this._formData.last_performed);
         if (lastPerformedISO === null) {
-            alert("Invalid date entered.");
+            showToast(this, localize("common.invalid_date", this.hass!.language));
             return;
         }
 
@@ -69,7 +70,7 @@ class HMTaskForm extends LitElement {
             }));
         } catch (error) {
             console.error("Failed to add task:", error);
-            alert(localize('panel.cards.new.alerts.error', this.hass!.language));
+            showToast(this, localize('panel.cards.new.alerts.error', this.hass!.language));
         }
     }
 

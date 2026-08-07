@@ -29,8 +29,10 @@ async def async_register_panel(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
     # Register static path only once, since it cannot be removed on unload
     if not hass.data.setdefault("home_maintenance_static_path_registered", False):
+        # Long-lived cache headers are safe: the bundle URLs carry a
+        # ?v=<version> query string, so every release is a fresh URL.
         await hass.http.async_register_static_paths(
-            [StaticPathConfig(PANEL_API_PATH, static_path, cache_headers=False)]
+            [StaticPathConfig(PANEL_API_PATH, static_path, cache_headers=True)]
         )
         # Load the Lovelace cards on every dashboard so users don't have to
         # register them as frontend resources manually.

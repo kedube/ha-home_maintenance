@@ -1,11 +1,14 @@
 import { LitElement, html } from "lit";
-import { property, state } from "lit/decorators.js";
+import { property, query, state } from "lit/decorators.js";
 import type { HomeAssistant } from "custom-card-helpers";
 import { mdiCheck, mdiClose, mdiDelete, mdiPencil } from "@mdi/js";
 
 import { localize } from '../../localize/localize';
 import { commonStyle } from '../styles';
+import { showToast } from '../toast';
 import { createGroup, deleteGroup, renameGroup } from '../data/websockets';
+import './confirm-dialog';
+import type { HMConfirmDialog } from './confirm-dialog';
 
 /**
  * The "Groups" card contents: create a group, and rename or delete existing
@@ -20,15 +23,21 @@ class HMGroupManager extends LitElement {
     @state() private _renamingGroup: string | null = null;
     @state() private _renameValue = "";
 
+    @query('hm-confirm-dialog') private _confirmDialog?: HMConfirmDialog;
+
     private async _handleCreate() {
         const groupId = this._newGroupName.trim();
         if (!groupId) return;
+        if (this.groups.includes(groupId)) {
+            showToast(this, localize('panel.cards.groups.alerts.exists', this.hass!.language, '{title}', groupId));
+            return;
+        }
         try {
             await createGroup(this.hass!, groupId);
             this._newGroupName = "";
         } catch (e) {
             console.error("Failed to create group:", e);
-            alert(localize('panel.cards.groups.alerts.error', this.hass!.language));
+            showToast(this, localize('panel.cards.groups.alerts.error', this.hass!.language));
         }
     }
 
@@ -46,16 +55,28 @@ class HMGroupManager extends LitElement {
             await renameGroup(this.hass!, oldGroup, newGroup);
         } catch (e) {
             console.error("Failed to rename group:", e);
+            showToast(this, localize('panel.cards.groups.alerts.rename_error', this.hass!.language));
         }
     }
 
-    private async _handleDelete(groupId: string) {
-        const msg = localize('panel.cards.groups.confirm_delete', this.hass!.language, '{title}', groupId);
-        if (!confirm(msg)) return;
+    private _handleDelete(groupId: string) {
+        const lang = this.hass!.language;
+        this._confirmDialog?.open({
+            heading: localize('panel.cards.groups.confirm_delete_title', lang),
+            message: localize('panel.cards.groups.confirm_delete', lang, '{title}', groupId),
+            confirmLabel: localize('panel.cards.groups.actions.delete', lang),
+            cancelLabel: localize('common.cancel', lang),
+            destructive: true,
+            onConfirm: () => this._deleteGroup(groupId),
+        });
+    }
+
+    private async _deleteGroup(groupId: string) {
         try {
             await deleteGroup(this.hass!, groupId);
         } catch (e) {
             console.error("Failed to delete group:", e);
+            showToast(this, localize('panel.cards.groups.alerts.delete_error', this.hass!.language));
         }
     }
 
@@ -125,6 +146,8 @@ class HMGroupManager extends LitElement {
                         </div>
                     `)}
             </div>
+
+            <hm-confirm-dialog></hm-confirm-dialog>
         `;
     }
 
