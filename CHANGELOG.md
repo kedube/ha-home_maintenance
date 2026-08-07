@@ -4,7 +4,7 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
-## Unreleased
+## 1.5.8 — 2026-08-07
 
 - Task groups: organize tasks into named groups. The panel gains a Groups
   card (create, rename, delete), a group picker in the add/edit forms, a
