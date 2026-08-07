@@ -4,7 +4,7 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
-## Unreleased
+## 1.5.11 — 2026-08-07
 
 - Add Task Lovelace card (`custom:home-maintenance-add-task-card`): the
   panel's full task-creation form — trigger types, groups, and all optional
