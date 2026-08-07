@@ -20,6 +20,7 @@ class HMTaskTable extends LitElement {
     @property() hass?: HomeAssistant;
     @property() narrow!: boolean;
     @property({ attribute: false }) tasks: Task[] = [];
+    @property({ attribute: false }) groups: string[] = [];
     @property({ attribute: false }) registry: EntityRegistryEntry[] = [];
     @property({ attribute: false }) labelRegistry: Label[] = [];
 
@@ -28,6 +29,7 @@ class HMTaskTable extends LitElement {
     // references unless the inputs actually changed.
     private _columnsCache?: { narrow: boolean; language: string; columns: Record<string, any> };
     private _rowsCache?: { tasks: Task[]; rows: any[] };
+    private _sectionsCache?: { tasks: Task[]; groups: string[]; sections: { title: string; rows: any[] }[] };
 
     private get _columns() {
         return {
@@ -151,6 +153,11 @@ class HMTaskTable extends LitElement {
                             icon: 'mdi:pencil'
                         },
                         {
+                            value: 'move',
+                            label: localize('panel.cards.current.actions.move', this.hass!.language),
+                            icon: 'mdi:folder-move-outline'
+                        },
+                        {
                             value: 'delete',
                             label: localize('panel.cards.current.actions.remove', this.hass!.language),
                             icon: 'mdi:delete'
@@ -185,7 +192,13 @@ class HMTaskTable extends LitElement {
         if (this._rowsCache?.tasks === this.tasks) {
             return this._rowsCache.rows;
         }
-        const rows = this.tasks.map((task: Task) => ({
+        const rows = this.tasks.map((task: Task) => this._taskToRow(task));
+        this._rowsCache = { tasks: this.tasks, rows };
+        return rows;
+    }
+
+    private _taskToRow(task: Task) {
+        return {
             ...task,
             trigger_type: task.trigger_type ?? "time",
             // Sort keys: remaining progress for count/runtime, days for time.
@@ -193,9 +206,41 @@ class HMTaskTable extends LitElement {
             next_due_date: task.next_due ? new Date(task.next_due) : null,
             next_due: this._dueSortKey(task),
             tagIcon: task.tag_id && task.tag_id.trim() !== "" ? "mdi:tag" : undefined,
-        }));
-        this._rowsCache = { tasks: this.tasks, rows };
-        return rows;
+        };
+    }
+
+    /**
+     * Tasks bucketed into group sections: ungrouped first (when non-empty),
+     * then every known group alphabetically — including empty ones, so a
+     * freshly created group is immediately visible.
+     */
+    private get _sections() {
+        if (
+            this._sectionsCache?.tasks === this.tasks &&
+            this._sectionsCache?.groups === this.groups
+        ) {
+            return this._sectionsCache.sections;
+        }
+
+        const buckets = new Map<string, any[]>();
+        this.groups.forEach((group) => buckets.set(group, []));
+        buckets.set("", []);
+        this.tasks.forEach((task) => {
+            const key = task.group_id?.trim() || "";
+            if (!buckets.has(key)) buckets.set(key, []);
+            buckets.get(key)!.push(this._taskToRow(task));
+        });
+
+        const named = [...buckets.keys()].filter((k) => k !== "").sort((a, b) => a.localeCompare(b));
+        const ungrouped = buckets.get("")!;
+        const sections = [
+            ...(ungrouped.length
+                ? [{ title: localize('common.ungrouped', this.hass!.language), rows: ungrouped }]
+                : []),
+            ...named.map((group) => ({ title: group, rows: buckets.get(group)! })),
+        ];
+        this._sectionsCache = { tasks: this.tasks, groups: this.groups, sections };
+        return sections;
     }
 
     private _intervalSortKey(task: Task): number {
@@ -231,23 +276,53 @@ class HMTaskTable extends LitElement {
     render() {
         if (!this.hass) return html``;
 
-        if (!this.tasks || this.tasks.length === 0) {
+        if ((!this.tasks || this.tasks.length === 0) && this.groups.length === 0) {
             return html`<span>${localize('common.no_tasks', this.hass.language)}</span>`;
+        }
+
+        // Without groups, keep the classic single table.
+        if (this.groups.length === 0) {
+            return html`
+                <div class="table-wrapper">
+                    <ha-data-table
+                        .hass=${this.hass}
+                        .columns=${this._columnsToDisplay}
+                        .data=${this._rows}
+                        .narrow=${this.narrow}
+                        auto-height
+                        id="tasks-table"
+                        class="tasks-table"
+                        clickable
+                    >
+                    </ha-data-table>
+                </div>
+            `;
         }
 
         return html`
             <div class="table-wrapper">
-                <ha-data-table
-                    .hass=${this.hass}
-                    .columns=${this._columnsToDisplay}
-                    .data=${this._rows}
-                    .narrow=${this.narrow}
-                    auto-height
-                    id="tasks-table"
-                    class="tasks-table"
-                    clickable
-                >
-                </ha-data-table>
+                ${this._sections.map((section) => html`
+                    <div class="group-section">
+                        <div class="group-header">
+                            <span class="group-title">${section.title}</span>
+                            <span class="group-count">${section.rows.length}</span>
+                        </div>
+                        ${section.rows.length ? html`
+                            <ha-data-table
+                                .hass=${this.hass}
+                                .columns=${this._columnsToDisplay}
+                                .data=${section.rows}
+                                .narrow=${this.narrow}
+                                auto-height
+                                class="tasks-table"
+                                clickable
+                            >
+                            </ha-data-table>
+                        ` : html`
+                            <span class="secondary">${localize('common.no_tasks', this.hass!.language)}</span>
+                        `}
+                    </div>
+                `)}
             </div>
         `;
     }

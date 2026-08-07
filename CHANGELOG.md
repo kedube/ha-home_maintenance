@@ -4,6 +4,23 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
+## Unreleased
+
+- Task groups: organize tasks into named groups. The panel gains a Groups
+  card (create, rename, delete), a group picker in the add/edit forms, a
+  "Move to group" task action, and the task table renders one section per
+  group. Groups persist in storage and survive renames/deletes with member
+  tasks reassigned. Ported from @select-star-from's fork.
+- Completion confirmation: marking a task complete now asks for confirmation
+  (with the recalculation consequences spelled out) and shows a toast on
+  success, replacing the silent one-click ✓. Ported from @select-star-from's
+  fork.
+- Home Maintenance Todo Lovelace card (`custom:home-maintenance-todo-card`):
+  a dashboard card showing tasks bucketed into Overdue / Due soon / Upcoming
+  with search, group filter, quick complete/remove actions, and expandable
+  details. Auto-registered — no manual resource setup needed. Ported from
+  @csteamengine's fork and adapted to backend-computed trigger state.
+
 ## 1.5.7 — 2026-08-07
 
 - Bundled brand icons (`brand/icon.png`, `brand/icon@2x.png`) — a house with

@@ -16,6 +16,7 @@ PANEL_FILENAME = "panel/main.js"
 PANEL_URL = "home-maintenance"
 PANEL_API_PATH = "/home_maintenance_static"
 PANEL_API_URL = PANEL_API_PATH + "/main.js"
+CARD_API_URL = PANEL_API_PATH + "/todo-card.js"
 PANEL_TITLE = NAME
 PANEL_ICON = "mdi:hammer-wrench"
 PANEL_NAME = "home-maintenance-panel"

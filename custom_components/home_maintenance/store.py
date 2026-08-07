@@ -16,7 +16,7 @@ _LOGGER = logging.getLogger(__name__)
 
 STORAGE_KEY = f"{const.DOMAIN}.storage"
 STORAGE_VERSION_MAJOR = 1
-STORAGE_VERSION_MINOR = 2
+STORAGE_VERSION_MINOR = 3
 SAVE_DELAY = 1.0
 
 # Fields a websocket update may modify. Everything else — id, current_count,
@@ -35,6 +35,7 @@ ALLOWED_UPDATE_FIELDS = {
     "count_threshold",
     "runtime_entity_id",
     "runtime_threshold",
+    "group_id",
 }
 
 
@@ -58,6 +59,15 @@ class HomeMaintenanceTask:
     runtime_baseline: float = attr.ib(default=0)
     area_id: str | None = attr.ib(default=None)
     description: str | None = attr.ib(default=None)
+    group_id: str | None = attr.ib(default=None)
+
+
+def normalize_group_id(group_id: str | None) -> str | None:
+    """Normalize a group name to its canonical stored value."""
+    if group_id is None:
+        return None
+    normalized = group_id.strip()
+    return normalized or None
 
 
 class TaskStore:
@@ -79,16 +89,35 @@ class TaskStore:
             minor_version=STORAGE_VERSION_MINOR,
         )
         self._tasks: dict[str, HomeMaintenanceTask] = {}
+        self._groups: set[str] = set()
 
     async def async_load(self) -> None:
-        """Load tasks from storage."""
+        """Load tasks (and groups, since 1.3) from storage."""
         data = await self._store.async_load()
         if data is None:
             return
 
+        # Storage < 1.3 was a bare task list; 1.3 wraps it with the group list.
+        if isinstance(data, list):
+            task_items = data
+            group_items: list[str] = []
+        else:
+            task_items = data.get("tasks", [])
+            group_items = data.get("groups", [])
+
         # Fields added after a task was stored fall back to the attrs defaults.
         self._tasks = {
-            task_data["id"]: HomeMaintenanceTask(**task_data) for task_data in data
+            task_data["id"]: HomeMaintenanceTask(**task_data)
+            for task_data in task_items
+        }
+        # Groups in use by tasks always exist, even if the stored list lags.
+        self._groups = {
+            group
+            for group in (
+                normalize_group_id(g)
+                for g in (*group_items, *(t.group_id for t in self._tasks.values()))
+            )
+            if group is not None
         }
 
     @property
@@ -168,9 +197,74 @@ class TaskStore:
             hour=0, minute=0, second=0, microsecond=0
         ).isoformat()
 
+    def get_groups(self) -> list[str]:
+        """Get all group names, sorted."""
+        return sorted(self._groups)
+
+    def create_group(self, group_id: str) -> None:
+        """Create a group if it does not already exist."""
+        normalized = normalize_group_id(group_id)
+        if not normalized:
+            msg = "Group name is required."
+            raise RuntimeError(msg)
+
+        if normalized in self._groups:
+            return
+        self._groups.add(normalized)
+        self._save()
+        async_dispatcher_send(self.hass, const.SIGNAL_TASKS_CHANGED)
+
+    def rename_group(self, old_group_id: str, new_group_id: str) -> None:
+        """Rename a group and reassign all member tasks."""
+        old_normalized = normalize_group_id(old_group_id)
+        new_normalized = normalize_group_id(new_group_id)
+
+        if not old_normalized or not new_normalized:
+            msg = "Both old and new group names are required."
+            raise RuntimeError(msg)
+
+        if old_normalized == new_normalized:
+            return
+
+        self._groups.discard(old_normalized)
+        self._groups.add(new_normalized)
+        self._reassign_group_members(old_normalized, new_normalized)
+
+    def delete_group(self, group_id: str) -> None:
+        """Delete a group and move member tasks to ungrouped."""
+        normalized = normalize_group_id(group_id)
+        if not normalized:
+            msg = "Group name is required."
+            raise RuntimeError(msg)
+
+        self._groups.discard(normalized)
+        self._reassign_group_members(normalized, None)
+
+    def _reassign_group_members(self, from_group: str, to_group: str | None) -> None:
+        """Move every task in from_group to to_group, then save and announce."""
+        changed = [
+            task_id
+            for task_id, task in self._tasks.items()
+            if normalize_group_id(task.group_id) == from_group
+        ]
+        for task_id in changed:
+            self._tasks[task_id].group_id = to_group
+
+        self._save()
+        for task_id in changed:
+            async_dispatcher_send(self.hass, const.SIGNAL_TASK_UPDATED, task_id)
+        async_dispatcher_send(self.hass, const.SIGNAL_TASKS_CHANGED)
+
+    def _register_task_group(self, task: HomeMaintenanceTask) -> None:
+        """Normalize a task's group and make sure it exists in the group list."""
+        task.group_id = normalize_group_id(task.group_id)
+        if task.group_id:
+            self._groups.add(task.group_id)
+
     def add(self, task: HomeMaintenanceTask, labels: list[str] | None = None) -> str:
         """Add a new task and announce it."""
         get_trigger(task.trigger_type).initialize(self.hass, task)
+        self._register_task_group(task)
         self._tasks[task.id] = task
         self._save()
         async_dispatcher_send(
@@ -205,6 +299,8 @@ class TaskStore:
             if key in ("tag_id", "area_id"):
                 value = value or None  # noqa: PLW2901
             setattr(task, key, value)
+
+        self._register_task_group(task)
 
         # Switching trigger type re-initializes trigger-managed state
         # (counter reset, runtime baseline capture).
@@ -281,5 +377,9 @@ class TaskStore:
     def _save(self) -> None:
         """Persist tasks in the background, coalescing rapid successive writes."""
         self._store.async_delay_save(
-            lambda: [attr.asdict(task) for task in self._tasks.values()], SAVE_DELAY
+            lambda: {
+                "tasks": [attr.asdict(task) for task in self._tasks.values()],
+                "groups": sorted(self._groups),
+            },
+            SAVE_DELAY,
         )

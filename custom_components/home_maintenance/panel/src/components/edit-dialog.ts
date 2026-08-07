@@ -20,6 +20,7 @@ class HMEditDialog extends LitElement {
     @property() hass?: HomeAssistant;
     @property({ attribute: false }) registry: EntityRegistryEntry[] = [];
     @property({ attribute: false }) labelRegistry: Label[] = [];
+    @property({ attribute: false }) groups: string[] = [];
 
     @state() private _taskId: string | null = null;
     @state() private _formData: TaskFormData = emptyTaskFormData();
@@ -101,7 +102,7 @@ class HMEditDialog extends LitElement {
                 <ha-form
                     autofocus
                     .hass=${this.hass}
-                    .schema=${editSchema(this._formData, this.hass.language)}
+                    .schema=${editSchema(this._formData, this.hass.language, this.groups)}
                     .computeLabel=${this._computeLabel}
                     .computeHelper=${this._computeHelper}
                     .data=${this._formData}

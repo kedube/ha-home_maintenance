@@ -2,6 +2,7 @@
 
 from datetime import timedelta
 
+import pytest
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
@@ -173,9 +174,10 @@ async def test_delayed_save_flushes_to_storage(hass, hass_storage, freezer) -> N
     await hass.async_block_till_done()
 
     saved = hass_storage[STORAGE_KEY]["data"]
-    assert len(saved) == 1
-    assert saved[0]["id"] == task.id
-    assert saved[0]["title"] == "Test Task"
+    assert saved["groups"] == []
+    assert len(saved["tasks"]) == 1
+    assert saved["tasks"][0]["id"] == task.id
+    assert saved["tasks"][0]["title"] == "Test Task"
 
 
 async def test_delete(hass) -> None:
@@ -185,3 +187,112 @@ async def test_delete(hass) -> None:
 
     store.delete(task.id)
     assert store.tasks == {}
+
+
+async def test_load_legacy_list_storage_derives_groups(hass, hass_storage) -> None:
+    """Pre-1.3 list-format storage loads, deriving groups from tasks."""
+    hass_storage[STORAGE_KEY] = {
+        "version": 1,
+        "minor_version": 2,
+        "key": STORAGE_KEY,
+        "data": [
+            {
+                "id": "home_maintenance_old",
+                "title": "Old Task",
+                "interval_value": 30,
+                "interval_type": "days",
+                "last_performed": "2026-01-01T00:00:00-05:00",
+                "group_id": "Kitchen",
+            }
+        ],
+    }
+
+    store = TaskStore(hass)
+    await store.async_load()
+
+    assert store.tasks["home_maintenance_old"].group_id == "Kitchen"
+    assert store.get_groups() == ["Kitchen"]
+
+
+async def test_load_dict_storage_merges_stored_and_derived_groups(
+    hass, hass_storage
+) -> None:
+    hass_storage[STORAGE_KEY] = {
+        "version": 1,
+        "minor_version": 3,
+        "key": STORAGE_KEY,
+        "data": {
+            "tasks": [
+                {
+                    "id": "home_maintenance_t1",
+                    "title": "Task",
+                    "interval_value": 30,
+                    "interval_type": "days",
+                    "last_performed": "2026-01-01T00:00:00-05:00",
+                    "group_id": "Garage",
+                }
+            ],
+            "groups": ["Kitchen", "  ", "Garage"],
+        },
+    }
+
+    store = TaskStore(hass)
+    await store.async_load()
+
+    assert store.get_groups() == ["Garage", "Kitchen"]
+
+
+async def test_create_group_normalizes_and_requires_name(hass) -> None:
+    store = TaskStore(hass)
+
+    store.create_group("  Kitchen  ")
+    store.create_group("Kitchen")  # duplicate is a no-op
+    assert store.get_groups() == ["Kitchen"]
+
+    with pytest.raises(RuntimeError):
+        store.create_group("   ")
+
+
+async def test_add_and_update_register_task_groups(hass) -> None:
+    store = TaskStore(hass)
+    task = make_task(group_id="  Kitchen ")
+    store.add(task)
+
+    assert task.group_id == "Kitchen"
+    assert store.get_groups() == ["Kitchen"]
+
+    store.update_task(task.id, {"group_id": "Garage"})
+    assert task.group_id == "Garage"
+    # The old group survives as an (empty) group; the new one is registered.
+    assert store.get_groups() == ["Garage", "Kitchen"]
+
+    store.update_task(task.id, {"group_id": ""})
+    assert task.group_id is None
+
+
+async def test_rename_group_reassigns_members(hass) -> None:
+    store = TaskStore(hass)
+    member = make_task(id="home_maintenance_member", group_id="Kitchen")
+    other = make_task(id="home_maintenance_other", group_id="Garage")
+    store.add(member)
+    store.add(other)
+
+    store.rename_group("Kitchen", "Cuisine")
+
+    assert member.group_id == "Cuisine"
+    assert other.group_id == "Garage"
+    assert store.get_groups() == ["Cuisine", "Garage"]
+
+    store.rename_group("Cuisine", "Cuisine")  # same name is a no-op
+    assert store.get_groups() == ["Cuisine", "Garage"]
+
+
+async def test_delete_group_moves_members_to_ungrouped(hass) -> None:
+    store = TaskStore(hass)
+    member = make_task(id="home_maintenance_member", group_id="Kitchen")
+    store.add(member)
+
+    store.delete_group("Kitchen")
+
+    assert member.group_id is None
+    assert store.get_groups() == []

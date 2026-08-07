@@ -4,11 +4,13 @@ import logging
 import os
 
 from homeassistant.components import frontend, panel_custom
+from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .const import (
+    CARD_API_URL,
     PANEL_API_PATH,
     PANEL_API_URL,
     PANEL_ICON,
@@ -29,6 +31,9 @@ async def async_register_panel(hass: HomeAssistant, entry: ConfigEntry) -> None:
         await hass.http.async_register_static_paths(
             [StaticPathConfig(PANEL_API_PATH, static_path, cache_headers=False)]
         )
+        # Load the Lovelace todo card on every dashboard so users don't have
+        # to register it as a frontend resource manually.
+        add_extra_js_url(hass, CARD_API_URL)
         hass.data["home_maintenance_static_path_registered"] = True
 
     admin_only = entry.options.get("admin_only", entry.data.get("admin_only", True))

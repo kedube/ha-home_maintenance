@@ -144,6 +144,70 @@ export const commonStyle = css`
         color: var(--primary-text-color);
     }
 
+    .group-section {
+        margin-bottom: 16px;
+    }
+
+    .group-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 4px;
+        border-bottom: 1px solid var(--divider-color);
+        margin-bottom: 8px;
+    }
+
+    .group-title {
+        font-weight: 600;
+    }
+
+    .group-count {
+        font-size: 12px;
+        color: var(--secondary-text-color);
+        background: var(--secondary-background-color);
+        border-radius: 999px;
+        padding: 2px 8px;
+    }
+
+    .group-management-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 10px;
+        flex-wrap: wrap;
+    }
+
+    .group-management-row ha-textfield {
+        min-width: 180px;
+        flex: 1;
+        text-align: left;
+    }
+
+    .group-list {
+        border-top: 1px solid var(--divider-color);
+        padding-top: 8px;
+        margin-top: 8px;
+    }
+
+    .group-list-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        min-height: 36px;
+        border-bottom: 1px solid var(--divider-color);
+    }
+
+    .group-list-row .group-actions {
+        display: flex;
+        align-items: center;
+        flex-shrink: 0;
+    }
+
+    .secondary {
+        color: var(--secondary-text-color);
+    }
+
     ha-dialog {
         --mdc-dialog-min-width: 600px;
     }

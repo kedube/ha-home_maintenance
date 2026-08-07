@@ -2,7 +2,8 @@
     "common": {
         "loading": "Wird geladen...",
         "none": "Keine",
-        "no_tasks": "Keine Aufgaben gefunden."
+        "no_tasks": "Keine Aufgaben gefunden.",
+        "ungrouped": "Ohne Gruppe"
     },
     "intervals": {
         "day": "Tag",
@@ -64,6 +65,10 @@
                     },
                     "description": {
                         "heading": "Beschreibung"
+                    },
+                    "group_id": {
+                        "heading": "Gruppe",
+                        "helper": "Gruppe wählen oder neuen Namen eingeben"
                     }
                 },
                 "sections": {
@@ -86,9 +91,31 @@
                 "actions": {
                     "complete": "Abschließen",
                     "edit": "Bearbeiten",
+                    "move": "In Gruppe verschieben",
                     "remove": "Entfernen"
                 },
-                "confirm_remove": "Sind Sie sicher, dass Sie diese Aufgabe entfernen möchten?"
+                "confirm_remove": "Sind Sie sicher, dass Sie diese Aufgabe entfernen möchten?",
+                "alerts": {
+                    "complete_success": "\"{title}\" wurde als erledigt markiert. Das nächste Fälligkeitsdatum wurde neu berechnet.",
+                    "complete_error": "Aufgabe konnte nicht als erledigt markiert werden. Details siehe Konsole."
+                }
+            },
+            "groups": {
+                "title": "Gruppen",
+                "fields": {
+                    "new_group": {
+                        "heading": "Neue Gruppe"
+                    }
+                },
+                "actions": {
+                    "create": "Erstellen",
+                    "rename": "Umbenennen",
+                    "delete": "Löschen",
+                    "save": "Speichern",
+                    "cancel": "Abbrechen"
+                },
+                "empty": "Noch keine Gruppen. Erstellen Sie eine, um Aufgaben zu organisieren.",
+                "confirm_delete": "Gruppe \"{title}\" löschen? Ihre Aufgaben werden in \"Ohne Gruppe\" verschoben."
             }
         },
         "dialog": {
@@ -137,6 +164,10 @@
                     },
                     "description": {
                         "heading": "Beschreibung"
+                    },
+                    "group_id": {
+                        "heading": "Gruppe",
+                        "helper": "Gruppe wählen oder neuen Namen eingeben"
                     }
                 },
                 "sections": {
@@ -145,6 +176,27 @@
                 "actions": {
                     "cancel": "Abbrechen",
                     "save": "Speichern"
+                }
+            },
+            "move_task": {
+                "title": "Aufgabe verschieben",
+                "fields": {
+                    "group_id": {
+                        "heading": "Gruppe"
+                    }
+                },
+                "actions": {
+                    "cancel": "Abbrechen",
+                    "move": "Verschieben"
+                }
+            },
+            "confirm_complete": {
+                "title": "Aufgabe als erledigt markieren",
+                "message": "\"{title}\" als erledigt markieren? Zuletzt durchgeführt wird auf heute zurückgesetzt und das nächste Fälligkeitsdatum wird basierend auf dem Intervall von {interval} neu berechnet.",
+                "message_progress": "\"{title}\" als erledigt markieren? Der Fortschritt ({interval}) beginnt von vorn.",
+                "actions": {
+                    "cancel": "Abbrechen",
+                    "confirm": "Als erledigt markieren"
                 }
             }
         }

@@ -61,6 +61,7 @@ export interface Task {
     runtime_baseline?: number;
     area_id?: string | null;
     description?: string | null;
+    group_id?: string | null;
     // Computed by the backend (store.serialize) so the panel renders trigger
     // state without reimplementing trigger semantics.
     due?: boolean;
@@ -84,4 +85,5 @@ export interface TaskFormData {
     runtime_threshold: number | "";
     area: string;
     description: string;
+    group_id: string;
 }

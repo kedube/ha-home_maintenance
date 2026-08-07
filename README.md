@@ -1,8 +1,8 @@
 # Home Maintenance Tracker for Home Assistant
 
-A custom Home Assistant integration for tracking recurring home maintenance tasks — changing air filters, cleaning gutters, testing smoke alarms — directly inside Home Assistant. Each task gets its own entity that turns on when the task is due, a built-in sidebar panel manages everything, and tasks can recur on a schedule, after a number of uses, or once a monitored sensor accumulates enough runtime.
+A custom Home Assistant integration for tracking recurring home maintenance tasks — changing air filters, cleaning gutters, testing smoke alarms — directly inside Home Assistant. Each task gets its own entity that turns on when the task is due, a built-in sidebar panel (with task groups) manages everything, a bundled Lovelace card surfaces due tasks on any dashboard, and tasks can recur on a schedule, after a number of uses, or once a monitored sensor accumulates enough runtime.
 
-Originally created by [@TJPoorman](https://github.com/TJPoorman/home_maintenance); this fork adds count- and runtime-based triggers, area support, task descriptions, Home Assistant 2026.3 compatibility, and automated releases.
+Originally created by [@TJPoorman](https://github.com/TJPoorman/home_maintenance); this fork adds count- and runtime-based triggers, area support, task groups, task descriptions, a dashboard card, Home Assistant 2026.3 compatibility, and automated releases — incorporating contributions from [@Seidlm](https://github.com/Seidlm), [@select-star-from](https://github.com/select-star-from), and [@csteamengine](https://github.com/csteamengine).
 
 [![CI](https://github.com/kedube/ha-maintenance_tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/kedube/ha-maintenance_tracker/actions/workflows/ci.yml)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://hacs.xyz/)
@@ -15,7 +15,9 @@ Originally created by [@TJPoorman](https://github.com/TJPoorman/home_maintenance
 - [Using the Panel](#using-the-panel)
   - [Trigger types](#trigger-types)
   - [Optional task fields](#optional-task-fields)
+  - [Task groups](#task-groups)
   - [NFC tags](#nfc-tags)
+- [Dashboard card](#dashboard-card)
 - [Entities](#entities)
 - [Services](#services)
 - [Automation ideas](#automation-ideas)
@@ -75,7 +77,7 @@ Submitting reloads the integration automatically, so changes — including a new
 
 ## Using the Panel
 
-Open **Home Maintenance** from the sidebar. The **Add New Task** card creates tasks; the task table shows every task with its interval, last-performed date, and next due date, and marks tasks that are due or overdue. Each row has a ✓ button to mark the task complete and a menu for editing (including the title) or deleting the task.
+Open **Home Maintenance** from the sidebar. The **Add New Task** card creates tasks; the task table shows every task with its interval, last-performed date, and next due date, and marks tasks that are due or overdue. Each row has a ✓ button to mark the task complete (after a confirmation, since completing resets the schedule or counter) and a menu for editing (including the title), moving the task to a [group](#task-groups), or deleting it.
 
 The panel updates live: changes made outside it — an NFC tag scan, a service call, an automation incrementing a counter, a runtime sensor ticking over — appear immediately without a refresh.
 
@@ -100,10 +102,33 @@ Every task has a trigger type that controls when it becomes due:
 - **NFC tag** — scanning the tag marks the task complete (see [NFC tags](#nfc-tags)).
 - **Area** — assigns the task's entity to a Home Assistant area.
 - **Description** — free-form notes, shown as an entity attribute.
+- **Group** — organizes the task into a named [group](#task-groups); pick an existing group or type a new name to create one on the fly.
+
+### Task groups
+
+Tasks can be organized into named groups — *Kitchen*, *HVAC*, *Outdoors* — and the task table renders one section per group (with ungrouped tasks first). Groups are managed three ways:
+
+- The **Groups** card in the panel creates, renames, and deletes groups. Renaming a group moves all its tasks along; deleting a group moves its tasks back to *Ungrouped* (the tasks themselves are never deleted).
+- The **Group** field in the add/edit forms assigns a task to a group — typing a new name there creates the group implicitly.
+- **Move to group** in a task's row menu quickly reassigns a single task.
 
 ### NFC tags
 
 Assign an NFC tag to a task and scanning that tag marks the task complete. Assign the same tag to several tasks to complete them all with one scan — handy for a "furnace room" tag that resets every filter task at once.
+
+## Dashboard card
+
+The integration bundles a **Home Maintenance Todo** Lovelace card that mirrors the panel on any dashboard: tasks bucketed into **Overdue**, **Due soon**, and **Upcoming**, with a search box, a group filter, quick complete/remove actions, and expandable details (description, last performed, count/runtime progress). The card is registered automatically — no manual resource setup — and appears in the card picker once the integration is loaded, or add it via YAML:
+
+```yaml
+type: custom:home-maintenance-todo-card
+title: Home Maintenance      # optional header (omit for none)
+due_soon_days: 14            # window for the "Due soon" bucket
+max_items: 0                 # cap the list (0 = no limit)
+show_search: true            # search box + group filter
+```
+
+The card updates live over the same push channel as the panel, and its header links back to the full panel for editing.
 
 ## Entities
 

@@ -43,6 +43,7 @@ UPDATES_SCHEMA = vol.Schema(
         vol.Optional("count_threshold"): vol.Coerce(int),
         vol.Optional("runtime_entity_id"): vol.Any(str, None),
         vol.Optional("runtime_threshold"): vol.Coerce(float),
+        vol.Optional("group_id"): vol.Any(str, None),
     }
 )
 
@@ -129,6 +130,7 @@ def websocket_add_task(
         runtime_threshold=float(msg.get("runtime_threshold") or 0),
         area_id=msg.get("area_id"),
         description=msg.get("description"),
+        group_id=msg.get("group_id"),
     )
 
     new_id = store.add(new_task, msg.get("labels", []))
@@ -191,6 +193,53 @@ def websocket_reset_count(
 ) -> None:
     """Reset the count for a count-based task."""
     _get_store(hass).reset_count(msg["task_id"])
+    connection.send_result(msg["id"], {"success": True})
+
+
+@callback
+def websocket_get_groups(
+    hass: HomeAssistant, connection: connection.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Get all group names."""
+    connection.send_result(msg["id"], _get_store(hass).get_groups())
+
+
+@callback
+def websocket_create_group(
+    hass: HomeAssistant, connection: connection.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Create a group."""
+    try:
+        _get_store(hass).create_group(msg["group_id"])
+    except RuntimeError as err:
+        connection.send_error(msg["id"], "invalid_input", str(err))
+        return
+    connection.send_result(msg["id"], {"success": True})
+
+
+@callback
+def websocket_rename_group(
+    hass: HomeAssistant, connection: connection.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Rename a group, reassigning its member tasks."""
+    try:
+        _get_store(hass).rename_group(msg["old_group_id"], msg["new_group_id"])
+    except RuntimeError as err:
+        connection.send_error(msg["id"], "invalid_input", str(err))
+        return
+    connection.send_result(msg["id"], {"success": True})
+
+
+@callback
+def websocket_delete_group(
+    hass: HomeAssistant, connection: connection.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Delete a group, moving its member tasks to ungrouped."""
+    try:
+        _get_store(hass).delete_group(msg["group_id"])
+    except RuntimeError as err:
+        connection.send_error(msg["id"], "invalid_input", str(err))
+        return
     connection.send_result(msg["id"], {"success": True})
 
 
@@ -281,6 +330,7 @@ async def async_register_websockets(hass: HomeAssistant) -> None:
                 vol.Optional("runtime_threshold"): vol.Coerce(float),
                 vol.Optional("area_id"): vol.Any(str, None),
                 vol.Optional("description"): vol.Any(str, None),
+                vol.Optional("group_id"): vol.Any(str, None),
             }
         ),
     )
@@ -342,6 +392,52 @@ async def async_register_websockets(hass: HomeAssistant) -> None:
             {
                 vol.Required("type"): "home_maintenance/reset_count",
                 vol.Required("task_id"): str,
+            }
+        ),
+    )
+
+    websocket_api.async_register_command(
+        hass,
+        "home_maintenance/get_groups",
+        websocket_get_groups,
+        messages.BASE_COMMAND_MESSAGE_SCHEMA.extend(
+            {vol.Required("type"): "home_maintenance/get_groups"}
+        ),
+    )
+
+    websocket_api.async_register_command(
+        hass,
+        "home_maintenance/create_group",
+        websocket_create_group,
+        messages.BASE_COMMAND_MESSAGE_SCHEMA.extend(
+            {
+                vol.Required("type"): "home_maintenance/create_group",
+                vol.Required("group_id"): str,
+            }
+        ),
+    )
+
+    websocket_api.async_register_command(
+        hass,
+        "home_maintenance/rename_group",
+        websocket_rename_group,
+        messages.BASE_COMMAND_MESSAGE_SCHEMA.extend(
+            {
+                vol.Required("type"): "home_maintenance/rename_group",
+                vol.Required("old_group_id"): str,
+                vol.Required("new_group_id"): str,
+            }
+        ),
+    )
+
+    websocket_api.async_register_command(
+        hass,
+        "home_maintenance/delete_group",
+        websocket_delete_group,
+        messages.BASE_COMMAND_MESSAGE_SCHEMA.extend(
+            {
+                vol.Required("type"): "home_maintenance/delete_group",
+                vol.Required("group_id"): str,
             }
         ),
     )

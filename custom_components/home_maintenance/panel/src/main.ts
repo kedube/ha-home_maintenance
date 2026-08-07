@@ -7,8 +7,8 @@ import { loadConfigDashboard } from "./helpers";
 import { commonStyle } from './styles'
 import { EntityRegistryEntry, IntegrationConfig, Label, Task, Tag } from './types';
 import {
-    completeTask,
     getConfig,
+    loadGroups,
     loadLabelRegistry,
     loadRegistryEntries,
     loadTags,
@@ -19,7 +19,12 @@ import {
 import './components/task-table'
 import './components/task-form'
 import './components/edit-dialog'
+import './components/group-manager'
+import './components/move-dialog'
+import './components/confirm-complete-dialog'
 import type { HMEditDialog } from './components/edit-dialog'
+import type { HMMoveDialog } from './components/move-dialog'
+import type { HMConfirmCompleteDialog } from './components/confirm-complete-dialog'
 
 const RELOAD_DEBOUNCE_MS = 300;
 
@@ -33,11 +38,14 @@ export class HomeMaintenancePanel extends LitElement {
 
     @state() private tags: Tag[] | null = null;
     @state() private tasks: Task[] = [];
+    @state() private groups: string[] = [];
     @state() private config: IntegrationConfig | null = null;
     @state() private registry: EntityRegistryEntry[] = [];
     @state() private labelRegistry: Label[] = [];
 
     @query('hm-edit-dialog') private _editDialog?: HMEditDialog;
+    @query('hm-move-dialog') private _moveDialog?: HMMoveDialog;
+    @query('hm-confirm-complete-dialog') private _confirmCompleteDialog?: HMConfirmCompleteDialog;
 
     private _unsubscribe?: () => Promise<void>;
     private _reloadTimer?: ReturnType<typeof setTimeout>;
@@ -75,29 +83,34 @@ export class HomeMaintenancePanel extends LitElement {
         await loadConfigDashboard();
         // Fetch everything concurrently, then assign synchronously so
         // LitElement batches the updates into a single render.
-        const [tags, tasks, config, registry, labelRegistry] = await Promise.all([
+        const [tags, tasks, groups, config, registry, labelRegistry] = await Promise.all([
             loadTags(this.hass!),
             loadTasks(this.hass!),
+            loadGroups(this.hass!),
             getConfig(this.hass!),
             loadRegistryEntries(this.hass!),
             loadLabelRegistry(this.hass!),
         ]);
         this.tags = tags;
         this.tasks = tasks;
+        this.groups = groups;
         this.config = config;
         this.registry = registry;
         this.labelRegistry = labelRegistry;
     }
 
     private _handleComplete(e: CustomEvent) {
-        completeTask(this.hass!, e.detail.taskId).catch((err) =>
-            console.error("Failed to complete task:", err));
+        const task = this.tasks.find((t) => t.id === e.detail.taskId);
+        if (task) this._confirmCompleteDialog?.open(task);
     }
 
     private _handleMenuAction(e: CustomEvent) {
         const { taskId, action } = e.detail;
         if (action === 'edit') {
             this._editDialog?.open(taskId);
+        } else if (action === 'move') {
+            const task = this.tasks.find((t) => t.id === taskId);
+            if (task) this._moveDialog?.open(task);
         } else if (action === 'delete') {
             this._handleRemove(taskId);
         }
@@ -139,7 +152,7 @@ export class HomeMaintenancePanel extends LitElement {
                     class="card-new"
                 >
                     <div class="card-content">
-                        <hm-task-form .hass=${this.hass}></hm-task-form>
+                        <hm-task-form .hass=${this.hass} .groups=${this.groups}></hm-task-form>
                     </div>
                 </ha-card>
 
@@ -152,11 +165,21 @@ export class HomeMaintenancePanel extends LitElement {
                             .hass=${this.hass}
                             .narrow=${this.narrow}
                             .tasks=${this.tasks}
+                            .groups=${this.groups}
                             .registry=${this.registry}
                             .labelRegistry=${this.labelRegistry}
                             @task-complete=${this._handleComplete}
                             @task-menu-action=${this._handleMenuAction}
                         ></hm-task-table>
+                    </div>
+                </ha-card>
+
+                <ha-card
+                    header="${localize('panel.cards.groups.title', this.hass.language)}"
+                    class="card-new"
+                >
+                    <div class="card-content">
+                        <hm-group-manager .hass=${this.hass} .groups=${this.groups}></hm-group-manager>
                     </div>
                 </ha-card>
             </div>
@@ -165,7 +188,10 @@ export class HomeMaintenancePanel extends LitElement {
                 .hass=${this.hass}
                 .registry=${this.registry}
                 .labelRegistry=${this.labelRegistry}
+                .groups=${this.groups}
             ></hm-edit-dialog>
+            <hm-move-dialog .hass=${this.hass} .groups=${this.groups}></hm-move-dialog>
+            <hm-confirm-complete-dialog .hass=${this.hass}></hm-confirm-complete-dialog>
         `;
     }
 

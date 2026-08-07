@@ -16,6 +16,7 @@ export const emptyTaskFormData = (): TaskFormData => ({
     runtime_threshold: "",
     area: "",
     description: "",
+    group_id: "",
 });
 
 export const taskToFormData = (
@@ -37,6 +38,7 @@ export const taskToFormData = (
     runtime_threshold: task.runtime_threshold ?? "",
     area: entity?.area_id ?? "",
     description: task.description ?? "",
+    group_id: task.group_id ?? "",
 });
 
 const triggerTypeSelector = (lang: string) => ({
@@ -85,7 +87,23 @@ const triggerFields = (formData: TaskFormData, lang: string): any[] => {
     ];
 };
 
-const optionalFields = (multilineDescription: boolean): any[] => [
+/** Group dropdown that also accepts a typed-in (new) group name. */
+export const groupSelector = (groups: string[], lang: string) => ({
+    name: "group_id",
+    selector: {
+        select: {
+            options: [
+                { value: "", label: localize("common.ungrouped", lang) },
+                ...groups.map((group) => ({ value: group, label: group })),
+            ],
+            mode: "dropdown",
+            custom_value: true,
+        },
+    },
+});
+
+const optionalFields = (multilineDescription: boolean, groups: string[], lang: string): any[] => [
+    groupSelector(groups, lang),
     { name: "last_performed", selector: { date: {} }, },
     { name: "icon", selector: { icon: {} }, },
     { name: "label", selector: { label: { multiple: true } }, },
@@ -100,14 +118,15 @@ export const basicSchema = (formData: TaskFormData, lang: string): any[] => [
     ...triggerFields(formData, lang),
 ];
 
-export const advancedSchema = (): any[] => optionalFields(false);
+export const advancedSchema = (groups: string[], lang: string): any[] =>
+    optionalFields(false, groups, lang);
 
-export const editSchema = (formData: TaskFormData, lang: string): any[] => [
+export const editSchema = (formData: TaskFormData, lang: string, groups: string[]): any[] => [
     { name: "title", selector: { text: {} }, },
     triggerTypeSelector(lang),
     ...triggerFields(formData, lang),
     { type: "constant", name: localize('panel.dialog.edit_task.sections.optional', lang), disabled: true },
-    ...optionalFields(true),
+    ...optionalFields(true, groups, lang),
 ];
 
 /** Validate required fields per trigger type. Returns true when valid. */
@@ -167,6 +186,7 @@ export const taskFormToAddPayload = (data: TaskFormData, lastPerformedISO: strin
         labels: data.label ?? [],
         area_id: data.area?.trim() || undefined,
         description: data.description || undefined,
+        group_id: data.group_id?.trim() || undefined,
         ...(trigger.count_entity_id ? { count_entity_id: trigger.count_entity_id, count_threshold: trigger.count_threshold } : {}),
         ...(trigger.runtime_entity_id ? { runtime_entity_id: trigger.runtime_entity_id, runtime_threshold: trigger.runtime_threshold } : {}),
     };
@@ -181,4 +201,5 @@ export const taskFormToUpdates = (data: TaskFormData, lastPerformedISO: string):
     tag_id: data.tag?.trim() || null,
     area_id: data.area?.trim() || null,
     description: data.description ?? "",
+    group_id: data.group_id?.trim() || null,
 });

@@ -63,6 +63,30 @@ export const resetCount = (hass: HomeAssistant, id: string): Promise<void> =>
         task_id: id,
     })
 
+export const loadGroups = (hass: HomeAssistant): Promise<string[]> =>
+    hass.callWS({
+        type: 'home_maintenance/get_groups',
+    })
+
+export const createGroup = (hass: HomeAssistant, groupId: string): Promise<void> =>
+    hass.callWS({
+        type: 'home_maintenance/create_group',
+        group_id: groupId,
+    })
+
+export const renameGroup = (hass: HomeAssistant, oldGroupId: string, newGroupId: string): Promise<void> =>
+    hass.callWS({
+        type: 'home_maintenance/rename_group',
+        old_group_id: oldGroupId,
+        new_group_id: newGroupId,
+    })
+
+export const deleteGroup = (hass: HomeAssistant, groupId: string): Promise<void> =>
+    hass.callWS({
+        type: 'home_maintenance/delete_group',
+        group_id: groupId,
+    })
+
 export const getConfig = (hass: HomeAssistant): Promise<IntegrationConfig> =>
     hass.callWS({
         type: 'home_maintenance/get_config',

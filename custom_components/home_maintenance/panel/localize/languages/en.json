@@ -2,7 +2,8 @@
     "common": {
         "loading": "Loading...",
         "none": "None",
-        "no_tasks": "No tasks found."
+        "no_tasks": "No tasks found.",
+        "ungrouped": "Ungrouped"
     },
     "intervals": {
         "day": "Day",
@@ -64,6 +65,10 @@
                     },
                     "runtime_threshold": {
                         "heading": "Runtime threshold"
+                    },
+                    "group_id": {
+                        "heading": "Group",
+                        "helper": "Pick a group or type a new name"
                     }
                 },
                 "sections": {
@@ -86,9 +91,31 @@
                 "actions": {
                     "complete": "Complete",
                     "edit": "Edit",
+                    "move": "Move to group",
                     "remove": "Remove"
                 },
-                "confirm_remove": "Are you sure you want to remove this task?"
+                "confirm_remove": "Are you sure you want to remove this task?",
+                "alerts": {
+                    "complete_success": "\"{title}\" marked complete. The next due date was recalculated.",
+                    "complete_error": "Failed to mark task complete. See console for details."
+                }
+            },
+            "groups": {
+                "title": "Groups",
+                "fields": {
+                    "new_group": {
+                        "heading": "New group"
+                    }
+                },
+                "actions": {
+                    "create": "Create",
+                    "rename": "Rename",
+                    "delete": "Delete",
+                    "save": "Save",
+                    "cancel": "Cancel"
+                },
+                "empty": "No groups yet. Create one to organize your tasks.",
+                "confirm_delete": "Delete group \"{title}\"? Its tasks move to Ungrouped."
             }
         },
         "dialog": {
@@ -137,6 +164,10 @@
                     },
                     "description": {
                         "heading": "Description"
+                    },
+                    "group_id": {
+                        "heading": "Group",
+                        "helper": "Pick a group or type a new name"
                     }
                 },
                 "sections": {
@@ -145,6 +176,27 @@
                 "actions": {
                     "cancel": "Cancel",
                     "save": "Save"
+                }
+            },
+            "move_task": {
+                "title": "Move task",
+                "fields": {
+                    "group_id": {
+                        "heading": "Group"
+                    }
+                },
+                "actions": {
+                    "cancel": "Cancel",
+                    "move": "Move"
+                }
+            },
+            "confirm_complete": {
+                "title": "Mark Task Complete",
+                "message": "Mark \"{title}\" as complete? Last performed will be reset to today and the next due date will be recalculated based on the {interval} interval.",
+                "message_progress": "Mark \"{title}\" as complete? Progress ({interval}) will start over.",
+                "actions": {
+                    "cancel": "Cancel",
+                    "confirm": "Mark Complete"
                 }
             }
         }

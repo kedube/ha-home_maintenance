@@ -18,6 +18,7 @@ import { TaskFormData } from '../types';
 /** The "Add New Task" card contents: basic + optional forms and the button. */
 class HMTaskForm extends LitElement {
     @property() hass?: HomeAssistant;
+    @property({ attribute: false }) groups: string[] = [];
 
     @state() private _formData: TaskFormData = emptyTaskFormData();
     private _advancedOpen = false;
@@ -85,7 +86,7 @@ class HMTaskForm extends LitElement {
                 <ha-form
                     .hass=${this.hass}
                     .data=${this._formData}
-                    .schema=${advancedSchema()}
+                    .schema=${advancedSchema(this.groups, this.hass.language)}
                     .computeLabel=${this._computeLabel}
                     .computeHelper=${this._computeHelper}
                     @value-changed=${(e: CustomEvent) => this._handleFormValueChanged(e)}

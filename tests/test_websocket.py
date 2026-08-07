@@ -213,3 +213,89 @@ async def test_get_config_includes_version(hass, setup_entry, hass_ws_client) ->
     assert response["success"]
     assert response["result"]["version"] == VERSION
     assert response["result"]["options"]["admin_only"] is True
+
+
+async def test_group_lifecycle(hass, setup_entry, hass_ws_client) -> None:
+    """Create, list, rename, and delete groups over the websocket API."""
+    client = await hass_ws_client(hass)
+    task_id = await add_task_via_ws(client, group_id="Kitchen")
+
+    await client.send_json_auto_id(
+        {"type": "home_maintenance/create_group", "group_id": "Garage"}
+    )
+    response = await client.receive_json()
+    assert response["success"], response
+
+    await client.send_json_auto_id({"type": "home_maintenance/get_groups"})
+    response = await client.receive_json()
+    assert response["success"]
+    assert response["result"] == ["Garage", "Kitchen"]
+
+    await client.send_json_auto_id(
+        {
+            "type": "home_maintenance/rename_group",
+            "old_group_id": "Kitchen",
+            "new_group_id": "Cuisine",
+        }
+    )
+    response = await client.receive_json()
+    assert response["success"], response
+
+    await client.send_json_auto_id(
+        {"type": "home_maintenance/get_task", "task_id": task_id}
+    )
+    response = await client.receive_json()
+    assert response["result"]["group_id"] == "Cuisine"
+
+    await client.send_json_auto_id(
+        {"type": "home_maintenance/delete_group", "group_id": "Cuisine"}
+    )
+    response = await client.receive_json()
+    assert response["success"], response
+
+    await client.send_json_auto_id(
+        {"type": "home_maintenance/get_task", "task_id": task_id}
+    )
+    response = await client.receive_json()
+    assert response["result"]["group_id"] is None
+
+    await client.send_json_auto_id({"type": "home_maintenance/get_groups"})
+    response = await client.receive_json()
+    assert response["result"] == ["Garage"]
+
+
+async def test_create_group_rejects_blank_name(
+    hass, setup_entry, hass_ws_client
+) -> None:
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "home_maintenance/create_group", "group_id": "   "}
+    )
+    response = await client.receive_json()
+    assert not response["success"]
+    assert response["error"]["code"] == "invalid_input"
+
+
+async def test_update_task_group(hass, setup_entry, hass_ws_client) -> None:
+    client = await hass_ws_client(hass)
+    task_id = await add_task_via_ws(client)
+
+    await client.send_json_auto_id(
+        {
+            "type": "home_maintenance/update_task",
+            "task_id": task_id,
+            "updates": {"group_id": "Outdoors"},
+        }
+    )
+    response = await client.receive_json()
+    assert response["success"], response
+
+    await client.send_json_auto_id(
+        {"type": "home_maintenance/get_task", "task_id": task_id}
+    )
+    response = await client.receive_json()
+    assert response["result"]["group_id"] == "Outdoors"
+
+    await client.send_json_auto_id({"type": "home_maintenance/get_groups"})
+    response = await client.receive_json()
+    assert response["result"] == ["Outdoors"]
