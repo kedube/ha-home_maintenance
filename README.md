@@ -4,7 +4,7 @@ A custom Home Assistant integration for tracking recurring home maintenance task
 
 Originally created by [@TJPoorman](https://github.com/TJPoorman/home_maintenance); this fork adds count- and runtime-based triggers, area support, task groups, task descriptions, a dashboard card, Home Assistant 2026.3 compatibility, and automated releases — incorporating contributions from [@Seidlm](https://github.com/Seidlm), [@select-star-from](https://github.com/select-star-from), and [@csteamengine](https://github.com/csteamengine).
 
-[![CI](https://github.com/kedube/ha-maintenance_tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/kedube/ha-maintenance_tracker/actions/workflows/ci.yml)
+[![CI](https://github.com/kedube/ha-home_maintenance/actions/workflows/ci.yml/badge.svg)](https://github.com/kedube/ha-home_maintenance/actions/workflows/ci.yml)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://hacs.xyz/)
 
 ## Contents
@@ -35,7 +35,7 @@ Originally created by [@TJPoorman](https://github.com/TJPoorman/home_maintenance
 
 1. In Home Assistant, open **HACS**.
 2. Open the menu in the top-right corner (**⋮**) and select **Custom repositories**.
-3. Paste this repository's URL: `https://github.com/kedube/ha-maintenance_tracker`
+3. Paste this repository's URL: `https://github.com/kedube/ha-home_maintenance`
 4. Set the category to **Integration** and click **Add**.
 5. Search for **Home Maintenance** in HACS, open it, and click **Download**.
 6. Restart Home Assistant.
@@ -46,7 +46,7 @@ After restart, add the integration from Home Assistant:
 
 ### Method 2: Manual installation
 
-1. Download `home_maintenance.zip` from the [latest release](https://github.com/kedube/ha-maintenance_tracker/releases) and extract it into `config/custom_components/home_maintenance`.
+1. Download `home_maintenance.zip` from the [latest release](https://github.com/kedube/ha-home_maintenance/releases) and extract it into `config/custom_components/home_maintenance`.
 2. Restart Home Assistant.
 3. Add the integration from **Settings → Devices & Services → Add Integration**, searching for **Home Maintenance** — or use the badge above.
 
@@ -242,7 +242,7 @@ When contributing, add a line describing your change under `## Unreleased` in [C
 
 ## Need help?
 
-Open an [issue](https://github.com/kedube/ha-maintenance_tracker/issues) here on GitHub, or ask in the [Home Assistant community thread](https://community.home-assistant.io/t/new-integration-home-maintenance-track-recurring-tasks-in-home-assistant/897324) for the upstream project.
+Open an [issue](https://github.com/kedube/ha-home_maintenance/issues) here on GitHub, or ask in the [Home Assistant community thread](https://community.home-assistant.io/t/new-integration-home-maintenance-track-recurring-tasks-in-home-assistant/897324) for the upstream project.
 
 ## License
 

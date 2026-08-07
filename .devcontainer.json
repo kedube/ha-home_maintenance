@@ -1,5 +1,5 @@
 {
-    "name": "kedube/ha-maintenance_tracker",
+    "name": "kedube/ha-home_maintenance",
     "image": "mcr.microsoft.com/devcontainers/python:3.14",
     "postCreateCommand": "scripts/setup",
     "forwardPorts": [
@@ -29,7 +29,7 @@
                 "files.trimTrailingWhitespace": true,
                 "python.analysis.typeCheckingMode": "basic",
                 "python.analysis.autoImportCompletions": true,
-                "python.defaultInterpreterPath": "/workspaces/ha-maintenance_tracker/.venv/bin/python",
+                "python.defaultInterpreterPath": "/workspaces/ha-home_maintenance/.venv/bin/python",
                 "[python]": {
                     "editor.defaultFormatter": "charliermarsh.ruff"
                 }

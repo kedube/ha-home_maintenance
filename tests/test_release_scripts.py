@@ -111,7 +111,7 @@ def test_generate_release_notes(tmp_path, monkeypatch, capsys) -> None:
     )
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("GITHUB_REPOSITORY", "kedube/ha-maintenance_tracker")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "kedube/ha-home_maintenance")
     monkeypatch.setattr(sys, "argv", ["generate_release_notes.py", "1.5.6", "notes.md"])
     load_script("generate_release_notes").main()
     capsys.readouterr()
@@ -122,6 +122,6 @@ def test_generate_release_notes(tmp_path, monkeypatch, capsys) -> None:
     assert "fix: a real change" in notes
     assert "chore(release)" not in notes
     compare_url = (
-        "https://github.com/kedube/ha-maintenance_tracker/compare/v1.5.5...v1.5.6"
+        "https://github.com/kedube/ha-home_maintenance/compare/v1.5.5...v1.5.6"
     )
     assert compare_url in notes
