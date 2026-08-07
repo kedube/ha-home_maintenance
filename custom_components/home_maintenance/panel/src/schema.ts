@@ -41,6 +41,13 @@ export const taskToFormData = (
     group_id: task.group_id ?? "",
 });
 
+/** Two-column responsive layout section (single column on narrow screens). */
+const grid = (schema: any[]) => ({
+    name: "",
+    type: "grid",
+    schema,
+});
+
 const triggerTypeSelector = (lang: string) => ({
     name: "trigger_type",
     required: true,
@@ -103,28 +110,34 @@ export const groupSelector = (groups: string[], lang: string) => ({
 });
 
 const optionalFields = (multilineDescription: boolean, groups: string[], lang: string): any[] => [
-    groupSelector(groups, lang),
-    { name: "last_performed", selector: { date: {} }, },
-    { name: "icon", selector: { icon: {} }, },
-    { name: "label", selector: { label: { multiple: true } }, },
-    { name: "tag", selector: { entity: { filter: { domain: "tag" } } }, },
-    { name: "area", selector: { area: {} }, },
+    grid([
+        groupSelector(groups, lang),
+        { name: "last_performed", selector: { date: {} }, },
+        { name: "icon", selector: { icon: {} }, },
+        { name: "tag", selector: { entity: { filter: { domain: "tag" } } }, },
+        { name: "area", selector: { area: {} }, },
+        { name: "label", selector: { label: { multiple: true } }, },
+    ]),
     { name: "description", selector: { text: multilineDescription ? { multiline: true } : {} } },
 ];
 
 export const basicSchema = (formData: TaskFormData, lang: string): any[] => [
-    { name: "title", required: true, selector: { text: {} }, },
-    triggerTypeSelector(lang),
-    ...triggerFields(formData, lang),
+    grid([
+        { name: "title", required: true, selector: { text: {} }, },
+        triggerTypeSelector(lang),
+        ...triggerFields(formData, lang),
+    ]),
 ];
 
 export const advancedSchema = (groups: string[], lang: string): any[] =>
     optionalFields(false, groups, lang);
 
 export const editSchema = (formData: TaskFormData, lang: string, groups: string[]): any[] => [
-    { name: "title", selector: { text: {} }, },
-    triggerTypeSelector(lang),
-    ...triggerFields(formData, lang),
+    grid([
+        { name: "title", selector: { text: {} }, },
+        triggerTypeSelector(lang),
+        ...triggerFields(formData, lang),
+    ]),
     { type: "constant", name: localize('panel.dialog.edit_task.sections.optional', lang), disabled: true },
     ...optionalFields(true, groups, lang),
 ];
