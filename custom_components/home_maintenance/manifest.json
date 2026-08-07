@@ -18,5 +18,5 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/kedube/ha-home_maintenance/issues",
   "requirements": [],
-  "version": "1.5.12"
+  "version": "1.5.13"
 }

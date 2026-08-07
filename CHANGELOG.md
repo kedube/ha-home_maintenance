@@ -4,7 +4,7 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
-## Unreleased
+## 1.5.13 — 2026-08-07
 
 - Compact task forms, restoring the density of the original design while
   keeping trigger types, groups, and all optional fields: the panel now
