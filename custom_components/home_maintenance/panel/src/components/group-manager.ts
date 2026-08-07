@@ -1,5 +1,5 @@
 import { LitElement, html } from "lit";
-import { property, state } from "lit/decorators.js";
+import { property, query, state } from "lit/decorators.js";
 import type { HomeAssistant } from "custom-card-helpers";
 import { mdiCheck, mdiClose, mdiDelete, mdiPencil } from "@mdi/js";
 
@@ -20,14 +20,22 @@ class HMGroupManager extends LitElement {
     @state() private _renamingGroup: string | null = null;
     @state() private _renameValue = "";
 
+    @query(".group-management-row ha-textfield")
+    private _newGroupField?: HTMLElement & { value?: string };
+
     private async _handleCreate() {
-        const groupId = this._newGroupName.trim();
+        // Read the field directly as well: if another frontend resource has
+        // registered a conflicting ha-textfield whose input events never
+        // reach us, the tracked state stays empty even though text is shown.
+        const groupId = (this._newGroupName.trim() || this._newGroupField?.value?.trim()) ?? "";
         if (!groupId) return;
         try {
             await createGroup(this.hass!, groupId);
             this._newGroupName = "";
+            if (this._newGroupField) this._newGroupField.value = "";
         } catch (e) {
             console.error("Failed to create group:", e);
+            alert(localize('panel.cards.groups.alerts.error', this.hass!.language));
         }
     }
 

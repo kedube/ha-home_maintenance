@@ -120,7 +120,10 @@
                     "cancel": "Cancel"
                 },
                 "empty": "No groups yet. Create one to organize your tasks.",
-                "confirm_delete": "Delete group \"{title}\"? Its tasks move to Ungrouped."
+                "confirm_delete": "Delete group \"{title}\"? Its tasks move to Ungrouped.",
+                "alerts": {
+                    "error": "Failed to create the group. Check the browser console and Home Assistant logs."
+                }
             }
         },
         "dialog": {

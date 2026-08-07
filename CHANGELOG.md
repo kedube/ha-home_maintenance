@@ -4,6 +4,14 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
+## Unreleased
+
+- Groups card: the Create action now reads the group name directly from the
+  text field as a fallback (guarding against environments where another
+  frontend resource registers a conflicting ha-textfield and input events
+  are lost) and shows an alert if the backend call fails instead of failing
+  silently.
+
 ## 1.5.14 — 2026-08-07
 
 - Create New Task form: all fields now render with a uniform label above the
