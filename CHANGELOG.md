@@ -4,7 +4,7 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
-## Unreleased
+## 1.5.7 — 2026-08-07
 
 - Bundled brand icons (`brand/icon.png`, `brand/icon@2x.png`) — a house with
   hammer and wrench — so HACS shows the integration's own icon instead of
