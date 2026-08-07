@@ -191,10 +191,14 @@ export const commonStyle = css`
         flex-wrap: wrap;
     }
 
-    .group-management-row ha-textfield {
+    .group-management-row ha-selector {
         min-width: 180px;
         flex: 1;
         text-align: left;
+    }
+
+    .group-list-row ha-selector {
+        flex: 1;
     }
 
     .group-list {

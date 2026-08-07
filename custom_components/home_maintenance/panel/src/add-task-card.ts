@@ -151,8 +151,9 @@ class HomeMaintenanceAddTaskCardEditor extends LitElement {
         this._config = { ...DEFAULT_CONFIG, ...config };
     }
 
-    private _valueChanged(key: string, value: any) {
-        this._config = { ...this._config, [key]: value };
+    private _valueChanged(ev: CustomEvent) {
+        ev.stopPropagation();
+        this._config = { ...this._config, ...ev.detail.value };
         this.dispatchEvent(new CustomEvent("config-changed", {
             detail: { config: this._config },
             bubbles: true,
@@ -162,14 +163,13 @@ class HomeMaintenanceAddTaskCardEditor extends LitElement {
 
     render() {
         return html`
-            <div style="padding: 16px;">
-                <ha-textfield
-                    label="Title (empty for none)"
-                    .value=${this._config.title ?? ""}
-                    @input=${(e: any) => this._valueChanged("title", e.target.value)}
-                    style="width: 100%;"
-                ></ha-textfield>
-            </div>
+            <ha-form
+                .hass=${this.hass}
+                .data=${this._config}
+                .schema=${[{ name: "title", selector: { text: {} } }]}
+                .computeLabel=${() => "Title (empty for none)"}
+                @value-changed=${(e: CustomEvent) => this._valueChanged(e)}
+            ></ha-form>
         `;
     }
 }

@@ -4,6 +4,15 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
+## Unreleased
+
+- Fixed: the Groups card's name fields did not render on Home Assistant
+  builds that removed the legacy `ha-textfield` component, making it
+  impossible to type a group name or create a group. The create and rename
+  fields now use `ha-selector` (the same component as the task forms), and
+  the todo/add-task card config editors were moved from hand-rolled
+  `ha-textfield`/`ha-formfield` markup to schema-driven `ha-form`.
+
 ## 1.5.15 — 2026-08-07
 
 - Groups card: the Create action now reads the group name directly from the

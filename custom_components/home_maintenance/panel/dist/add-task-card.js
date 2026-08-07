@@ -193,10 +193,14 @@ Try polyfilling it using "@formatjs/intl-pluralrules"
         flex-wrap: wrap;
     }
 
-    .group-management-row ha-textfield {
+    .group-management-row ha-selector {
         min-width: 180px;
         flex: 1;
         text-align: left;
+    }
+
+    .group-list-row ha-selector {
+        flex: 1;
     }
 
     .group-list {
@@ -330,15 +334,14 @@ Try polyfilling it using "@formatjs/intl-pluralrules"
         .card-content {
             padding: 8px 16px 16px;
         }
-    `,E([N({attribute:!1})],I.prototype,"hass",2),E([M()],I.prototype,"_config",2),E([M()],I.prototype,"_groups",2),E([M()],I.prototype,"_ready",2);var me=class extends S{constructor(){super(...arguments);this._config=Pe}setConfig(r){this._config={...Pe,...r}}_valueChanged(r,i){this._config={...this._config,[r]:i},this.dispatchEvent(new CustomEvent("config-changed",{detail:{config:this._config},bubbles:!0,composed:!0}))}render(){return w`
-            <div style="padding: 16px;">
-                <ha-textfield
-                    label="Title (empty for none)"
-                    .value=${this._config.title??""}
-                    @input=${r=>this._valueChanged("title",r.target.value)}
-                    style="width: 100%;"
-                ></ha-textfield>
-            </div>
+    `,E([N({attribute:!1})],I.prototype,"hass",2),E([M()],I.prototype,"_config",2),E([M()],I.prototype,"_groups",2),E([M()],I.prototype,"_ready",2);var me=class extends S{constructor(){super(...arguments);this._config=Pe}setConfig(r){this._config={...Pe,...r}}_valueChanged(r){r.stopPropagation(),this._config={...this._config,...r.detail.value},this.dispatchEvent(new CustomEvent("config-changed",{detail:{config:this._config},bubbles:!0,composed:!0}))}render(){return w`
+            <ha-form
+                .hass=${this.hass}
+                .data=${this._config}
+                .schema=${[{name:"title",selector:{text:{}}}]}
+                .computeLabel=${()=>"Title (empty for none)"}
+                @value-changed=${r=>this._valueChanged(r)}
+            ></ha-form>
         `}};E([N({attribute:!1})],me.prototype,"hass",2),E([M()],me.prototype,"_config",2);customElements.get("home-maintenance-add-task-card")||customElements.define("home-maintenance-add-task-card",I);customElements.get("home-maintenance-add-task-card-editor")||customElements.define("home-maintenance-add-task-card-editor",me);window.customCards=window.customCards||[];window.customCards.push({type:"home-maintenance-add-task-card",name:"Home Maintenance Add Task",description:"Create Home Maintenance tasks from a dashboard \u2014 the panel's full add-task form, including trigger types, groups, and optional fields",preview:!1});
 /*! Bundled license information:
 

@@ -796,8 +796,28 @@ class HomeMaintenanceTodoCardEditor extends LitElement {
         this._config = { ...DEFAULT_CONFIG, ...config };
     }
 
-    private _valueChanged(key: string, value: any) {
-        this._config = { ...this._config, [key]: value };
+    private static readonly _schema = [
+        { name: "title", selector: { text: {} } },
+        { name: "due_soon_days", selector: { number: { min: 0, mode: "box" } } },
+        { name: "max_items", selector: { number: { min: 0, mode: "box" } } },
+        { name: "group", selector: { text: {} } },
+        { name: "show_search", selector: { boolean: {} } },
+    ];
+
+    private static readonly _labels: Record<string, string> = {
+        title: "Title",
+        due_soon_days: "Due Soon Days (threshold)",
+        max_items: "Max Items (0 = no limit)",
+        group: "Group (show only this group's tasks)",
+        show_search: "Show Search Bar",
+    };
+
+    private _computeLabel = (schema: { name: string }): string =>
+        HomeMaintenanceTodoCardEditor._labels[schema.name] ?? schema.name;
+
+    private _valueChanged(ev: CustomEvent) {
+        ev.stopPropagation();
+        this._config = { ...DEFAULT_CONFIG, ...this._config, ...ev.detail.value };
         this.dispatchEvent(new CustomEvent("config-changed", {
             detail: { config: this._config },
             bubbles: true,
@@ -807,44 +827,13 @@ class HomeMaintenanceTodoCardEditor extends LitElement {
 
     render() {
         return html`
-            <div style="padding: 16px;">
-                <ha-textfield
-                    label="Title"
-                    .value=${this._config.title ?? ""}
-                    @input=${(e: any) => this._valueChanged("title", e.target.value)}
-                    style="width: 100%; margin-bottom: 12px;"
-                ></ha-textfield>
-
-                <ha-textfield
-                    label="Due Soon Days (threshold)"
-                    type="number"
-                    .value=${String(this._config.due_soon_days ?? 14)}
-                    @input=${(e: any) => this._valueChanged("due_soon_days", parseInt(e.target.value) || 14)}
-                    style="width: 100%; margin-bottom: 12px;"
-                ></ha-textfield>
-
-                <ha-textfield
-                    label="Max Items (0 = no limit)"
-                    type="number"
-                    .value=${String(this._config.max_items ?? 0)}
-                    @input=${(e: any) => this._valueChanged("max_items", parseInt(e.target.value) || 0)}
-                    style="width: 100%; margin-bottom: 12px;"
-                ></ha-textfield>
-
-                <ha-textfield
-                    label="Group (show only this group's tasks)"
-                    .value=${this._config.group ?? ""}
-                    @input=${(e: any) => this._valueChanged("group", e.target.value)}
-                    style="width: 100%; margin-bottom: 12px;"
-                ></ha-textfield>
-
-                <ha-formfield label="Show Search Bar">
-                    <ha-switch
-                        .checked=${this._config.show_search ?? true}
-                        @change=${(e: any) => this._valueChanged("show_search", e.target.checked)}
-                    ></ha-switch>
-                </ha-formfield>
-            </div>
+            <ha-form
+                .hass=${this.hass}
+                .data=${{ ...DEFAULT_CONFIG, ...this._config }}
+                .schema=${HomeMaintenanceTodoCardEditor._schema}
+                .computeLabel=${this._computeLabel}
+                @value-changed=${(e: CustomEvent) => this._valueChanged(e)}
+            ></ha-form>
         `;
     }
 }
