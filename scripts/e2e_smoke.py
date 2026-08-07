@@ -68,7 +68,7 @@ def request(
     return json.loads(raw) if raw else None
 
 
-def wait_for_ha(base: str, timeout: int = 180) -> None:
+def wait_for_ha(base: str, timeout: int = 420) -> None:
     """Poll until the Home Assistant HTTP server responds."""
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -220,38 +220,54 @@ def main() -> int:
     base = f"http://localhost:{args.port}"
 
     config_dir = Path(tempfile.mkdtemp(prefix="hm-smoke-"))
+    # Deliberately minimal: default_config would pip-install requirements
+    # for dozens of integrations on a cold CI environment and blow the boot
+    # timeout. frontend + config are all the panel and config-flow need.
     (config_dir / "configuration.yaml").write_text(
-        f"default_config:\nhttp:\n  server_port: {args.port}\n"
+        f"frontend:\nconfig:\nhttp:\n  server_port: {args.port}\n"
     )
     (config_dir / "custom_components").symlink_to(REPO / "custom_components")
 
     # HASS_PYTHON lets a local run pair a playwright env with the project's
     # Home Assistant venv; in CI both live in the same interpreter.
     hass_python = os.environ.get("HASS_PYTHON", sys.executable)
-    proc = subprocess.Popen(
-        [hass_python, "-m", "homeassistant", "--config", str(config_dir)],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    try:
-        wait_for_ha(base)
-        token = onboard(base)
-        add_integration(base, token)
-        time.sleep(3)
-        errors = drive_panel(base)
-    finally:
-        proc.terminate()
+    log_path = config_dir / "hass-output.log"
+    errors: list[str] = []
+    with log_path.open("wb") as log_file:
+        proc = subprocess.Popen(
+            [hass_python, "-m", "homeassistant", "--config", str(config_dir)],
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+        )
         try:
-            proc.wait(timeout=30)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-        if not args.keep:
-            shutil.rmtree(config_dir, ignore_errors=True)
+            print("waiting for Home Assistant to boot...")
+            wait_for_ha(base)
+            print("onboarding...")
+            token = onboard(base)
+            print("adding the home_maintenance integration...")
+            add_integration(base, token)
+            time.sleep(3)
+            print("driving the panel...")
+            errors = drive_panel(base)
+        except Exception as err:  # noqa: BLE001 - report, dump logs, fail the run
+            errors.append(f"{type(err).__name__}: {err}")
+        finally:
+            proc.terminate()
+            try:
+                proc.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                proc.kill()
 
     if errors:
         print("SMOKE TEST FAILED:")
         for e in errors:
             print(f"  - {e}")
+        print("---- Home Assistant output (tail) ----")
+        tail = log_path.read_text(errors="replace").splitlines()[-100:]
+        print("\n".join(tail))
+    if not args.keep:
+        shutil.rmtree(config_dir, ignore_errors=True)
+    if errors:
         return 1
     print("Smoke test passed: panel rendered, task added, group created.")
     return 0
