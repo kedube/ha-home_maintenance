@@ -4,7 +4,7 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
-## Unreleased
+## 1.5.16 — 2026-08-07
 
 - Fixed: the Groups card's name fields did not render on Home Assistant
   builds that removed the legacy `ha-textfield` component, making it
