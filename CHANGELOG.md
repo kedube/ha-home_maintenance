@@ -4,7 +4,7 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
-## Unreleased
+## 1.5.14 — 2026-08-07
 
 - Create New Task form: all fields now render with a uniform label above the
   input, so fields line up horizontally regardless of selector style (the
