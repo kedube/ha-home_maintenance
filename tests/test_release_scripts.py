@@ -121,4 +121,7 @@ def test_generate_release_notes(tmp_path, monkeypatch, capsys) -> None:
     assert "- highlight entry" in notes
     assert "fix: a real change" in notes
     assert "chore(release)" not in notes
-    assert "https://github.com/kedube/ha-maintenance_tracker/compare/v1.5.5...v1.5.6" in notes
+    compare_url = (
+        "https://github.com/kedube/ha-maintenance_tracker/compare/v1.5.5...v1.5.6"
+    )
+    assert compare_url in notes
