@@ -41,6 +41,58 @@ USERNAME = "smoke"
 PASSWORD = "smoke-test-password"
 SCREENSHOT = "/tmp/hm_smoke_panel.png"
 
+# On a bare `pip install homeassistant`, the frontend needs requirements the
+# wheel does not ship: hass_frontend itself (else HA boots into recovery
+# mode) and the packages of every component HA's service-description
+# validation imports at runtime (hassil, numpy, mutagen, ...). Resolve them
+# from the installed HA itself: seed with frontend plus the component list
+# inside helpers.service._base_components, walk each manifest's dependency
+# graph, and collect the pinned requirements — version-correct for whatever
+# HA release is installed.
+_COLLECT_REQUIREMENTS = """
+import inspect
+import json
+import pathlib
+
+import homeassistant.components as comps
+from homeassistant.helpers import service
+
+base = pathlib.Path(comps.__file__).parent
+src = inspect.getsource(service._base_components)
+block = src.split("from homeassistant.components import (", 1)[1].split(")", 1)[0]
+names = (name.strip(",") for name in block.split())
+seeds = {name for name in names if name.isidentifier()}
+# stream: imported by camera at module level without a manifest link
+seeds |= {"frontend", "onboarding", "config", "lovelace", "stream"}
+seen = set()
+queue = sorted(seeds)
+reqs = set()
+while queue:
+    domain = queue.pop()
+    if domain in seen:
+        continue
+    seen.add(domain)
+    manifest = base / domain / "manifest.json"
+    if not manifest.exists():
+        continue
+    data = json.loads(manifest.read_text())
+    reqs.update(data.get("requirements", []))
+    queue.extend(data.get("dependencies", []))
+    # after_dependencies matter too: e.g. camera imports stream (numpy, av)
+    # at module import time but only declares it as an after_dependency.
+    queue.extend(data.get("after_dependencies", []))
+print("\\n".join(sorted(reqs)))
+"""
+
+
+def install_ha_component_requirements(hass_python: str) -> None:
+    """Install the frontend-critical component requirements of installed HA."""
+    reqs = subprocess.check_output(
+        [hass_python, "-c", _COLLECT_REQUIREMENTS], text=True
+    ).split()
+    print(f"installing HA component requirements: {' '.join(reqs)}")
+    subprocess.check_call([hass_python, "-m", "pip", "install", "--quiet", *reqs])
+
 
 def request(
     method: str,
@@ -216,6 +268,12 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8129)
     parser.add_argument("--keep", action="store_true", help="keep the temp config dir")
+    parser.add_argument(
+        "--install-deps",
+        action="store_true",
+        help="pip install the HA component requirements the frontend needs "
+        "(for bare CI environments)",
+    )
     args = parser.parse_args()
     base = f"http://localhost:{args.port}"
 
@@ -231,6 +289,8 @@ def main() -> int:
     # HASS_PYTHON lets a local run pair a playwright env with the project's
     # Home Assistant venv; in CI both live in the same interpreter.
     hass_python = os.environ.get("HASS_PYTHON", sys.executable)
+    if args.install_deps:
+        install_ha_component_requirements(hass_python)
     log_path = config_dir / "hass-output.log"
     errors: list[str] = []
     with log_path.open("wb") as log_file:

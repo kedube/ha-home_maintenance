@@ -126,7 +126,7 @@ jobs:
           python -m playwright install --with-deps chromium
 
       - name: Browser smoke test against HA next
-        run: python scripts/e2e_smoke.py
+        run: python scripts/e2e_smoke.py --install-deps
 
   # The only check that exercises the real frontend: boots HA, logs in with
   # a browser, adds a task, and creates a group. Catches component removals
@@ -151,8 +151,10 @@ jobs:
       - name: Install chromium
         run: python -m playwright install --with-deps chromium
 
+      # --install-deps adds the manifest-pinned requirements the frontend
+      # needs on a bare pip install (hass_frontend, hassil, numpy, ...).
       - name: Run browser smoke test
-        run: python scripts/e2e_smoke.py
+        run: python scripts/e2e_smoke.py --install-deps
 
       - name: Upload panel screenshot
         if: always()
