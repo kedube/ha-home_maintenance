@@ -26,8 +26,9 @@ Highlights block of the GitHub release notes.
 - scripts/develop now launches Home Assistant via the venv's python -m
   homeassistant, surviving repository moves/renames that break entrypoint
   shebangs.
-- Fresh README panel screenshot reflecting the redesigned single-column
-  layout.
+- All three README screenshots recaptured in a consistent dark theme: the
+  redesigned single-column panel (with an overdue task highlighted), the
+  integration device page, and the entity attributes dialog.
 
 ## 1.5.16 — 2026-08-07
 
