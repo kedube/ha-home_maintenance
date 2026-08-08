@@ -6,6 +6,7 @@ import { localize } from '../../localize/localize';
 import { commonStyle } from '../styles';
 import { showToast } from '../toast';
 import { saveTask } from '../data/websockets';
+import { renderTaskField, taskFieldStyles } from './task-fields';
 import {
     basicFields,
     computeISODate,
@@ -19,10 +20,7 @@ import { TaskFormData } from '../types';
 
 /**
  * The "Add New Task" card contents: basic + optional field rows and the
- * button. Fields are rendered as bare ha-selectors with a uniform label
- * above each one, so the inputs line up horizontally regardless of whether
- * the underlying selector draws its own label inside (text, select, icon)
- * or above (entity, label pickers) the input.
+ * button, rendered through the shared task-field renderer.
  */
 class HMTaskForm extends LitElement {
     @property() hass?: HomeAssistant;
@@ -30,22 +28,6 @@ class HMTaskForm extends LitElement {
 
     @state() private _formData: TaskFormData = emptyTaskFormData();
     private _advancedOpen = false;
-
-    private _computeLabel = (schema: { name: string }): string => {
-        try {
-            return localize(`panel.cards.new.fields.${schema.name}.heading`, this.hass!.language) ?? schema.name;
-        } catch {
-            return schema.name;
-        }
-    }
-
-    private _computeHelper = (schema: { name: string }): string => {
-        try {
-            return localize(`panel.cards.new.fields.${schema.name}.helper`, this.hass!.language) ?? "";
-        } catch {
-            return "";
-        }
-    }
 
     private async _handleAddTaskClick() {
         if (!validateTaskForm(this._formData)) {
@@ -74,26 +56,17 @@ class HMTaskForm extends LitElement {
         }
     }
 
-    private _handleFieldChanged(name: string, ev: CustomEvent) {
+    private _handleFieldChanged = (name: string, ev: CustomEvent) => {
         ev.stopPropagation();
         this._formData = { ...this._formData, [name]: ev.detail.value };
     }
 
-    private _renderField = (field: any) => html`
-        <div class="field ${field.name}">
-            <div class="field-label">
-                ${this._computeLabel(field)}${field.required ? " *" : ""}
-            </div>
-            <ha-selector
-                .hass=${this.hass}
-                .selector=${field.selector}
-                .value=${(this._formData as any)[field.name]}
-                .helper=${this._computeHelper(field)}
-                .required=${field.required ?? false}
-                @value-changed=${(e: CustomEvent) => this._handleFieldChanged(field.name, e)}
-            ></ha-selector>
-        </div>
-    `;
+    private _renderField = (field: any) => renderTaskField({
+        hass: this.hass!,
+        keyPrefix: 'panel.cards.new.fields',
+        data: this._formData,
+        onChange: this._handleFieldChanged,
+    }, field);
 
     render() {
         if (!this.hass) return html``;
@@ -122,38 +95,10 @@ class HMTaskForm extends LitElement {
         `;
     }
 
-    static styles = [commonStyle, css`
-        .fields-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-            column-gap: 8px;
-            row-gap: 16px;
-            align-items: start;
-        }
-
+    static styles = [commonStyle, taskFieldStyles, css`
         .basic-row .fields-grid {
             flex: 1 1 500px;
             min-width: 0;
-        }
-
-        .field-label {
-            font-size: 12px;
-            font-weight: 500;
-            color: var(--secondary-text-color);
-            margin-bottom: 4px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .field ha-selector {
-            display: block;
-            width: 100%;
-        }
-
-        /* Description spans the full line below the other optional fields. */
-        .field.description {
-            grid-column: 1 / -1;
         }
     `];
 }

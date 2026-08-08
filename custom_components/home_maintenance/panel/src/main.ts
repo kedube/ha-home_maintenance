@@ -6,8 +6,10 @@ import { localize } from '../localize/localize';
 import { loadConfigDashboard } from "./helpers";
 import { showToast } from './toast';
 import { commonStyle } from './styles'
+import { Debouncer, formatProgress, formatTimeInterval } from './util';
 import { EntityRegistryEntry, IntegrationConfig, Label, Task, Tag } from './types';
 import {
+    completeTask,
     getConfig,
     loadGroups,
     loadLabelRegistry,
@@ -22,11 +24,9 @@ import './components/task-form'
 import './components/edit-dialog'
 import './components/group-manager'
 import './components/move-dialog'
-import './components/confirm-complete-dialog'
 import './components/confirm-dialog'
 import type { HMEditDialog } from './components/edit-dialog'
 import type { HMMoveDialog } from './components/move-dialog'
-import type { HMConfirmCompleteDialog } from './components/confirm-complete-dialog'
 import type { HMConfirmDialog } from './components/confirm-dialog'
 
 const RELOAD_DEBOUNCE_MS = 300;
@@ -48,11 +48,10 @@ export class HomeMaintenancePanel extends LitElement {
 
     @query('hm-edit-dialog') private _editDialog?: HMEditDialog;
     @query('hm-move-dialog') private _moveDialog?: HMMoveDialog;
-    @query('hm-confirm-complete-dialog') private _confirmCompleteDialog?: HMConfirmCompleteDialog;
     @query('hm-confirm-dialog') private _confirmDialog?: HMConfirmDialog;
 
     private _unsubscribe?: () => Promise<void>;
-    private _reloadTimer?: ReturnType<typeof setTimeout>;
+    private _reload = new Debouncer(() => this._loadData(), RELOAD_DEBOUNCE_MS);
 
     connectedCallback() {
         super.connectedCallback();
@@ -61,51 +60,76 @@ export class HomeMaintenancePanel extends LitElement {
 
     disconnectedCallback() {
         super.disconnectedCallback();
-        if (this._reloadTimer !== undefined) clearTimeout(this._reloadTimer);
+        this._reload.cancel();
         this._unsubscribe?.();
         this._unsubscribe = undefined;
     }
 
     private async _initialize() {
+        // One-time setup: HA components, plus data no task mutation can
+        // change. The push path below only refetches what mutations touch.
+        await loadConfigDashboard();
+        const [tags, config] = await Promise.all([
+            loadTags(this.hass!),
+            getConfig(this.hass!),
+        ]);
+        this.tags = tags;
+        this.config = config;
         await this._loadData();
         try {
-            this._unsubscribe = await subscribeUpdates(this.hass!, () => this._scheduleReload());
+            this._unsubscribe = await subscribeUpdates(this.hass!, () => this._reload.schedule());
         } catch (e) {
             console.error("Failed to subscribe to task updates:", e);
         }
     }
 
-    private _scheduleReload() {
-        if (this._reloadTimer !== undefined) clearTimeout(this._reloadTimer);
-        this._reloadTimer = setTimeout(() => {
-            this._reloadTimer = undefined;
-            this._loadData();
-        }, RELOAD_DEBOUNCE_MS);
-    }
-
     private async _loadData() {
-        await loadConfigDashboard();
-        // Fetch everything concurrently, then assign synchronously so
-        // LitElement batches the updates into a single render.
-        const [tags, tasks, groups, config, registry, labelRegistry] = await Promise.all([
-            loadTags(this.hass!),
+        // Fetch concurrently, then assign synchronously so LitElement
+        // batches the updates into a single render. Registries are included
+        // because task edits can change entity labels and areas.
+        const [tasks, groups, registry, labelRegistry] = await Promise.all([
             loadTasks(this.hass!),
             loadGroups(this.hass!),
-            getConfig(this.hass!),
             loadRegistryEntries(this.hass!),
             loadLabelRegistry(this.hass!),
         ]);
-        this.tags = tags;
         this.tasks = tasks;
         this.groups = groups;
-        this.config = config;
         this.registry = registry;
         this.labelRegistry = labelRegistry;
     }
 
     private _handleComplete(e: CustomEvent) {
         const task = this.tasks.find((t) => t.id === e.detail.taskId);
-        if (task) this._confirmCompleteDialog?.open(task);
+        if (!task) return;
+        const lang = this.hass!.language;
+        const isTime = (task.trigger_type ?? "time") === "time";
+        const interval = isTime
+            ? formatTimeInterval(task.interval_value, task.interval_type, lang)
+            : formatProgress(task);
+        this._confirmDialog?.open({
+            heading: localize('panel.dialog.confirm_complete.title', lang),
+            message: localize(
+                isTime
+                    ? 'panel.dialog.confirm_complete.message'
+                    : 'panel.dialog.confirm_complete.message_progress',
+                lang, '{title}', task.title, '{interval}', interval,
+            ),
+            confirmLabel: localize('panel.dialog.confirm_complete.actions.confirm', lang),
+            cancelLabel: localize('common.cancel', lang),
+            onConfirm: () => this._completeTask(task),
+        });
+    }
+
+    private async _completeTask(task: Task) {
+        const lang = this.hass!.language;
+        try {
+            await completeTask(this.hass!, task.id);
+            showToast(this, localize('panel.cards.current.alerts.complete_success', lang, '{title}', task.title));
+        } catch (e) {
+            console.error("Failed to complete task:", e);
+            showToast(this, localize('panel.cards.current.alerts.complete_error', lang));
+        }
     }
 
     private _handleMenuAction(e: CustomEvent) {
@@ -218,7 +242,6 @@ export class HomeMaintenancePanel extends LitElement {
                 .groups=${this.groups}
             ></hm-edit-dialog>
             <hm-move-dialog .hass=${this.hass} .groups=${this.groups}></hm-move-dialog>
-            <hm-confirm-complete-dialog .hass=${this.hass}></hm-confirm-complete-dialog>
             <hm-confirm-dialog></hm-confirm-dialog>
         `;
     }

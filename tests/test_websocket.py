@@ -299,3 +299,88 @@ async def test_update_task_group(hass, setup_entry, hass_ws_client) -> None:
     await client.send_json_auto_id({"type": "home_maintenance/get_groups"})
     response = await client.receive_json()
     assert response["result"] == ["Outdoors"]
+
+
+async def test_update_to_count_requires_fields(
+    hass, setup_entry, hass_ws_client
+) -> None:
+    """Switching a task's trigger via update is validated like add."""
+    client = await hass_ws_client(hass)
+    task_id = await add_task_via_ws(client)
+
+    await client.send_json_auto_id(
+        {
+            "type": "home_maintenance/update_task",
+            "task_id": task_id,
+            "updates": {"trigger_type": "count"},
+        }
+    )
+    response = await client.receive_json()
+    assert not response["success"]
+    assert response["error"]["code"] == "invalid_input"
+
+    # The task was left untouched
+    await client.send_json_auto_id(
+        {"type": "home_maintenance/get_task", "task_id": task_id}
+    )
+    response = await client.receive_json()
+    assert response["result"]["trigger_type"] == "time"
+
+
+async def test_mutations_on_missing_task_return_clean_errors(
+    hass, setup_entry, hass_ws_client
+) -> None:
+    """Store errors surface as websocket errors, not unhandled exceptions."""
+    client = await hass_ws_client(hass)
+    for msg in (
+        {
+            "type": "home_maintenance/update_task",
+            "task_id": "nope",
+            "updates": {"title": "x"},
+        },
+        {"type": "home_maintenance/complete_task", "task_id": "nope"},
+        {"type": "home_maintenance/remove_task", "task_id": "nope"},
+        {"type": "home_maintenance/increment_count", "task_id": "nope"},
+        {"type": "home_maintenance/reset_count", "task_id": "nope"},
+    ):
+        await client.send_json_auto_id(msg)
+        response = await client.receive_json()
+        assert not response["success"], msg
+        assert response["error"]["code"] == "invalid_input", msg
+
+
+async def test_rename_group_collision_rejected(
+    hass, setup_entry, hass_ws_client
+) -> None:
+    """Renaming a group onto an existing one returns a clean error."""
+    client = await hass_ws_client(hass)
+    for group in ("Garage", "Basement"):
+        await client.send_json_auto_id(
+            {"type": "home_maintenance/create_group", "group_id": group}
+        )
+        assert (await client.receive_json())["success"]
+
+    await client.send_json_auto_id(
+        {
+            "type": "home_maintenance/rename_group",
+            "old_group_id": "Garage",
+            "new_group_id": "Basement",
+        }
+    )
+    response = await client.receive_json()
+    assert not response["success"]
+    assert response["error"]["code"] == "invalid_input"
+
+
+async def test_commands_after_unload_return_error(
+    hass, setup_entry, hass_ws_client
+) -> None:
+    """Commands stay registered after unload but fail cleanly, not with KeyError."""
+    client = await hass_ws_client(hass)
+    assert await hass.config_entries.async_unload(setup_entry.entry_id)
+    await hass.async_block_till_done()
+
+    await client.send_json_auto_id({"type": "home_maintenance/get_tasks"})
+    response = await client.receive_json()
+    assert not response["success"]
+    assert response["error"]["code"] == "invalid_input"

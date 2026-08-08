@@ -13,7 +13,9 @@
         "week": "Woche",
         "weeks": "Wochen",
         "month": "Monat",
-        "months": "Monate"
+        "months": "Monate",
+        "every_uses": "Alle {value} Nutzungen",
+        "every_runtime": "Alle {value} Laufzeit"
     },
     "trigger_types": {
         "time": "Zeitbasiert",
@@ -215,8 +217,7 @@
                 "actions": {
                     "cancel": "Abbrechen",
                     "confirm": "Als erledigt markieren"
-                },
-                "message_simple": "\"{title}\" als erledigt markieren? Der Fortschritt beginnt von vorn und das nächste Fälligkeitsdatum wird neu berechnet."
+                }
             },
             "confirm_remove": {
                 "title": "Aufgabe entfernen",

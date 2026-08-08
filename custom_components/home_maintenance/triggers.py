@@ -9,22 +9,21 @@ websocket API share a single implementation.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
+from datetime import timedelta
+from typing import TYPE_CHECKING, Any
 
 from dateutil.relativedelta import relativedelta
 from homeassistant.util import dt as dt_util
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+    from datetime import datetime
+
     from homeassistant.core import HomeAssistant
 
     from .store import HomeMaintenanceTask
 
 UNAVAILABLE_STATES = ("unknown", "unavailable")
-
-
-def _midnight(value: datetime) -> datetime:
-    return value.replace(hour=0, minute=0, second=0, microsecond=0)
 
 
 class TimeTrigger:
@@ -34,6 +33,10 @@ class TimeTrigger:
 
     def watched_entity(self, task: HomeMaintenanceTask) -> str | None:
         """Return the entity this trigger monitors, if any."""
+        return None
+
+    def validate(self, fields: Mapping[str, Any]) -> str | None:
+        """Return an error message when required trigger fields are missing."""
         return None
 
     def initialize(self, hass: HomeAssistant, task: HomeMaintenanceTask) -> None:
@@ -62,14 +65,14 @@ class TimeTrigger:
             due = last + relativedelta(months=task.interval_value)
         else:
             due = last
-        return _midnight(due)
+        return dt_util.start_of_local_day(dt_util.as_local(due))
 
     def is_due(self, hass: HomeAssistant, task: HomeMaintenanceTask) -> bool:
         """Return whether the task is currently due."""
         due = self.next_due(hass, task)
         if due is None:
             return True
-        return _midnight(dt_util.now()) >= due
+        return dt_util.start_of_local_day() >= due
 
     def progress(
         self, hass: HomeAssistant, task: HomeMaintenanceTask
@@ -95,6 +98,13 @@ class CountTrigger(TimeTrigger):
     def watched_entity(self, task: HomeMaintenanceTask) -> str | None:
         """Return the entity this trigger monitors, if any."""
         return task.count_entity_id
+
+    def validate(self, fields: Mapping[str, Any]) -> str | None:
+        """Return an error message when required trigger fields are missing."""
+        threshold = fields.get("count_threshold") or 0
+        if not fields.get("count_entity_id") or threshold <= 0:
+            return "count tasks require count_entity_id and a positive threshold"
+        return None
 
     def initialize(self, hass: HomeAssistant, task: HomeMaintenanceTask) -> None:
         """Set up trigger-specific state when a task is created or retyped."""
@@ -137,6 +147,13 @@ class RuntimeTrigger(TimeTrigger):
     def watched_entity(self, task: HomeMaintenanceTask) -> str | None:
         """Return the entity this trigger monitors, if any."""
         return task.runtime_entity_id
+
+    def validate(self, fields: Mapping[str, Any]) -> str | None:
+        """Return an error message when required trigger fields are missing."""
+        threshold = fields.get("runtime_threshold") or 0
+        if not fields.get("runtime_entity_id") or threshold <= 0:
+            return "runtime tasks require runtime_entity_id and a positive threshold"
+        return None
 
     def current_value(
         self, hass: HomeAssistant, task: HomeMaintenanceTask

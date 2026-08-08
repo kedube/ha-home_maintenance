@@ -13,7 +13,9 @@
         "week": "Week",
         "weeks": "Weeks",
         "month": "Month",
-        "months": "Months"
+        "months": "Months",
+        "every_uses": "Every {value} uses",
+        "every_runtime": "Every {value} runtime"
     },
     "trigger_types": {
         "time": "Time-based",
@@ -215,8 +217,7 @@
                 "actions": {
                     "cancel": "Cancel",
                     "confirm": "Mark Complete"
-                },
-                "message_simple": "Mark \"{title}\" as complete? Progress will start over and the next due date will be recalculated."
+                }
             },
             "confirm_remove": {
                 "title": "Remove Task",

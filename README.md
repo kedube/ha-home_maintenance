@@ -22,6 +22,7 @@ Originally created by [@TJPoorman](https://github.com/TJPoorman/home_maintenance
 - [Services](#services)
 - [Automation ideas](#automation-ideas)
 - [Screenshots](#screenshots)
+- [Troubleshooting](#troubleshooting)
 - [Project scope](#project-scope)
 - [Development](#development)
 - [Need help?](#need-help)
@@ -77,9 +78,13 @@ Submitting reloads the integration automatically, so changes — including a new
 
 ## Using the Panel
 
-Open **Home Maintenance** from the sidebar. The **Add New Task** card creates tasks; the task table shows every task with its interval, last-performed date, and next due date, and marks tasks that are due or overdue. Each row has a ✓ button to mark the task complete (after a confirmation, since completing resets the schedule or counter) and a menu for editing (including the title), moving the task to a [group](#task-groups), or deleting it.
+Open **Home Maintenance** from the sidebar. The panel stacks three cards in a single column:
 
-The panel updates live: changes made outside it — an NFC tag scan, a service call, an automation incrementing a counter, a runtime sensor ticking over — appear immediately without a refresh.
+- **Create New Task** — the main fields (title, trigger type, the trigger's two fields, last performed) and the **Add Task** button sit on one line; everything else lives behind the collapsed **Optional settings** row. On narrow screens the fields wrap automatically.
+- **Current Tasks** — every task with its interval, last-performed date, and next due date (overdue dates highlighted), one section per [group](#task-groups). Each row has a ✓ button to mark the task complete (after a confirmation, since completing resets the schedule or counter) and a menu for editing (including the title), moving the task to a group, or deleting it.
+- **Groups** — create, rename, and delete [task groups](#task-groups).
+
+Actions confirm with toast notifications, destructive actions ask first in a dialog, and the panel updates live: changes made outside it — an NFC tag scan, a service call, an automation incrementing a counter, a runtime sensor ticking over — appear immediately without a refresh.
 
 ### Trigger types
 
@@ -126,6 +131,7 @@ title: Home Maintenance      # optional header (omit for none)
 due_soon_days: 14            # window for the "Due soon" bucket
 max_items: 0                 # cap the list (0 = no limit)
 show_search: true            # search box + group filter
+# group: Kitchen             # pin to one task group (hides the dropdown)
 ```
 
 The card updates live over the same push channel as the panel, and its header links back to the full panel for editing. Set `group: Kitchen` to pin a card to a single [task group](#task-groups) (this hides the group dropdown) — handy for one card per room or system.
@@ -212,6 +218,14 @@ automation:
 ![Integration Page](screenshots/integration-page.PNG)
 ![Entity Attributes](screenshots/entity-attributes.PNG)
 
+## Troubleshooting
+
+**The panel or cards look outdated after an upgrade.** The frontend bundles are served under version-stamped URLs (`…/main.js?v=1.5.x`), so after Home Assistant restarts a normal page reload fetches the matching frontend — no cache clearing needed. If you still see an old UI, check **Settings → Dashboards → Resources** for manually added `/home_maintenance_static/…` entries left over from before the cards were auto-registered, and remove them.
+
+**A field doesn't render, or a button does nothing.** This is usually a frontend component conflict — either another custom card bundling outdated Home Assistant components, or a Home Assistant release removing a legacy element. Try a private/incognito window first (rules out cached resources); if it persists, open the browser console (F12) and [file an issue](https://github.com/kedube/ha-home_maintenance/issues) with the console output and your Home Assistant version.
+
+**Non-admin users can't see the panel.** That's the **Admin only** option (on by default) — turn it off via **Configure** on the integration entry. Task entities are visible to everyone either way.
+
 ## Project scope
 
 This integration fills a simple gap: recurring tasks without stacks of helpers and automations. It is intentionally minimal — focused on task tracking. Home Assistant already provides powerful dashboards, automations, and alerts; this integration complements them rather than replacing them, so feature requests that duplicate native functionality may be declined.
@@ -223,6 +237,7 @@ The repo ships a devcontainer (Python 3.14, Node 20) and helper scripts:
 - `scripts/setup` — create a `.venv` and install requirements.
 - `scripts/develop` — run a local Home Assistant instance with the integration symlinked in.
 - `scripts/lint` — run ruff over the codebase (CI enforces `ruff check` and `ruff format --check`).
+- `scripts/e2e_smoke.py` — browser smoke test (see below).
 
 Run the test suite (coverage gate: 85%) with:
 
@@ -231,19 +246,31 @@ pip install -r requirements_test.txt
 python -m pytest
 ```
 
-The sidebar panel is a Lit + TypeScript app in `custom_components/home_maintenance/panel/` (dependencies are exact-pinned via the committed `package-lock.json`). After changing panel sources, rebuild the committed bundle:
+The sidebar panel is a Lit + TypeScript app in `custom_components/home_maintenance/panel/` (dependencies are exact-pinned via the committed `package-lock.json`). After changing panel sources, rebuild the committed bundles:
 
 ```sh
 cd custom_components/home_maintenance/panel
 npm ci
-npm run build   # regenerates dist/main.js
+npm run build   # regenerates dist/main.js, todo-card.js, add-task-card.js
 ```
+
+The panel only uses current Home Assistant components (`ha-selector`, `ha-form`, `ha-button`, `ha-dialog`) — legacy elements (`mwc-*`, `ha-textfield`, `ha-formfield`, `ha-md-*`, `paper-*`) break silently when Home Assistant removes them, and CI rejects them.
+
+The **browser smoke test** catches what pytest can't: it boots a throwaway Home Assistant with the integration, completes onboarding via the API, then logs in with headless Chrome, adds a task, and creates a group — failing if any form field stops rendering or any flow breaks:
+
+```sh
+pip install homeassistant colorlog playwright
+python -m playwright install chromium
+python scripts/e2e_smoke.py --install-deps
+```
+
+`--install-deps` adds the manifest-pinned packages the HA frontend needs on a bare pip install; set `HASS_PYTHON=/path/to/venv/bin/python` to run Home Assistant from a different environment than playwright.
 
 For a tour of how the pieces fit together — the task store, dispatcher signals, trigger strategies, push entities, the websocket API, and the panel components — see [docs/architecture.md](docs/architecture.md).
 
 ### CI and releases
 
-Every push and pull request runs the **CI** workflow: HACS validation, hassfest, ruff, pytest on Python 3.13 and 3.14 (with an 85% coverage gate), and a panel type-check + build that fails if the committed `dist/main.js` drifts from the sources. A weekly, non-blocking **HA next** job additionally runs the suite against the newest Home Assistant pre-release as an early warning for upstream breaking changes, and dependabot keeps the panel's npm dependencies fresh (its PRs get the bundle rebuilt automatically). When CI passes on `main`, the **Release** workflow automatically bumps the patch version (in `const.py` and `manifest.json` together), rotates the `Unreleased` section of [CHANGELOG.md](CHANGELOG.md) into the release notes, tags `vX.Y.Z`, and publishes a GitHub release with the HACS zip attached. Minor/major bumps (or a re-release) can be triggered manually from the workflow's **Run workflow** menu.
+Every push and pull request runs the **CI** workflow: HACS validation, hassfest, ruff, pytest on Python 3.13 and 3.14 (with an 85% coverage gate), a panel type-check + build that fails if the committed bundles drift from the sources or if legacy Home Assistant components reappear, and the browser smoke test driving the real panel headlessly (its screenshot is uploaded as a run artifact). A weekly, non-blocking **HA next** job additionally runs the pytest suite *and* the smoke test against the newest Home Assistant pre-release as an early warning for upstream breaking changes, and dependabot keeps the panel's npm dependencies fresh (its PRs get the bundle rebuilt automatically). When CI passes on `main`, the **Release** workflow automatically bumps the patch version (in `const.py` and `manifest.json` together), rotates the `Unreleased` section of [CHANGELOG.md](CHANGELOG.md) into the release notes, tags `vX.Y.Z`, and publishes a GitHub release with the HACS zip attached. Minor/major bumps (or a re-release) can be triggered manually from the workflow's **Run workflow** menu.
 
 When contributing, add a line describing your change under `## Unreleased` in [CHANGELOG.md](CHANGELOG.md) — it becomes the *Highlights* section of the next release's notes. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guidelines.
 

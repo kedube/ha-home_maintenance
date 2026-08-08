@@ -4,6 +4,7 @@ import type { HomeAssistant } from "custom-card-helpers";
 
 import { localize } from '../../localize/localize';
 import { commonStyle } from '../styles';
+import { dialogFooter } from '../util';
 import { updateTask } from '../data/websockets';
 import { groupSelector } from '../schema';
 import { Task } from '../types';
@@ -56,14 +57,19 @@ class HMMoveDialog extends LitElement {
                     @value-changed=${(e: CustomEvent) => (this._groupId = e.detail.value.group_id ?? "")}
                 ></ha-form>
 
-                <ha-dialog-footer slot="footer">
-                    <ha-button data-dialog="close" appearance="plain" slot="secondaryAction">
+                ${dialogFooter(html`
+                    <ha-button
+                        data-dialog="close"
+                        appearance="plain"
+                        slot="secondaryAction"
+                        @click=${this._close}
+                    >
                         ${localize('panel.dialog.move_task.actions.cancel', lang)}
                     </ha-button>
                     <ha-button slot="primaryAction" @click=${this._handleMove}>
                         ${localize('panel.dialog.move_task.actions.move', lang)}
                     </ha-button>
-                </ha-dialog-footer>
+                `)}
             </ha-dialog>
         `;
     }

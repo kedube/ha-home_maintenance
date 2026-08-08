@@ -6,6 +6,7 @@ import { formatDateNumeric } from "custom-card-helpers";
 import { localize } from '../localize/localize';
 import { loadConfigDashboard } from './helpers';
 import { showToast } from './toast';
+import { Debouncer, formatProgress, formatTriggerInterval, parseStoredDate } from './util';
 import { Task } from './types';
 import {
     completeTask,
@@ -65,7 +66,7 @@ class HomeMaintenanceTodoCard extends LitElement {
     @query('hm-confirm-dialog') private _confirmDialog?: HMConfirmDialog;
 
     private _unsubscribe?: () => Promise<void>;
-    private _reloadTimer?: ReturnType<typeof setTimeout>;
+    private _reload = new Debouncer(() => this._loadData(), RELOAD_DEBOUNCE_MS);
     private _initialized = false;
 
     setConfig(config: CardConfig) {
@@ -86,7 +87,7 @@ class HomeMaintenanceTodoCard extends LitElement {
 
     disconnectedCallback() {
         super.disconnectedCallback();
-        if (this._reloadTimer !== undefined) clearTimeout(this._reloadTimer);
+        this._reload.cancel();
         this._unsubscribe?.();
         this._unsubscribe = undefined;
         this._initialized = false;
@@ -105,18 +106,10 @@ class HomeMaintenanceTodoCard extends LitElement {
         await loadConfigDashboard();
         await this._loadData();
         try {
-            this._unsubscribe = await subscribeUpdates(this.hass!, () => this._scheduleReload());
+            this._unsubscribe = await subscribeUpdates(this.hass!, () => this._reload.schedule());
         } catch (e) {
             console.error("Failed to subscribe to task updates:", e);
         }
-    }
-
-    private _scheduleReload() {
-        if (this._reloadTimer !== undefined) clearTimeout(this._reloadTimer);
-        this._reloadTimer = setTimeout(() => {
-            this._reloadTimer = undefined;
-            this._loadData();
-        }, RELOAD_DEBOUNCE_MS);
     }
 
     private async _loadData() {
@@ -145,8 +138,9 @@ class HomeMaintenanceTodoCard extends LitElement {
         let nextDue: Date | null = null;
         let daysUntilDue: number | null = null;
         if (isTime && task.next_due) {
-            nextDue = new Date(task.next_due);
-            nextDue.setHours(0, 0, 0, 0);
+            // Parse the calendar date, not the instant: new Date(iso) would
+            // shift the backend's local midnight through the browser TZ.
+            nextDue = parseStoredDate(task.next_due);
             daysUntilDue = Math.ceil((nextDue.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
         }
 
@@ -157,11 +151,7 @@ class HomeMaintenanceTodoCard extends LitElement {
 
         let completedToday = false;
         if (task.last_performed) {
-            const [lpPart] = task.last_performed.split("T");
-            const [lpY, lpM, lpD] = lpPart.split("-").map(Number);
-            const lastDone = new Date(lpY, lpM - 1, lpD);
-            lastDone.setHours(0, 0, 0, 0);
-            completedToday = lastDone.getTime() === now.getTime();
+            completedToday = parseStoredDate(task.last_performed).getTime() === now.getTime();
         }
 
         return { raw: task, nextDue, daysUntilDue, status, completedToday };
@@ -192,7 +182,7 @@ class HomeMaintenanceTodoCard extends LitElement {
     private _formatDaysLabel(ct: ComputedTask): string {
         const task = ct.raw;
         if ((task.trigger_type ?? "time") !== "time") {
-            return `${task.progress_current ?? 0} / ${task.progress_target ?? 0}`;
+            return formatProgress(task);
         }
         const days = ct.daysUntilDue;
         if (days === null) return "";
@@ -210,23 +200,7 @@ class HomeMaintenanceTodoCard extends LitElement {
     }
 
     private _formatStoredDate(dateStr: string): string {
-        const [datePart] = dateStr.split("T");
-        const [year, month, day] = datePart.split("-").map(Number);
-        return formatDateNumeric(new Date(year, month - 1, day), this.hass!.locale);
-    }
-
-    private _getIntervalLabel(task: Task): string {
-        const triggerType = task.trigger_type ?? "time";
-        if (triggerType === "count") {
-            return `Every ${task.count_threshold} uses`;
-        }
-        if (triggerType === "runtime") {
-            return `Every ${task.runtime_threshold} runtime`;
-        }
-        const val = task.interval_value;
-        const type = task.interval_type;
-        const label = val === 1 ? type.slice(0, -1) : type;
-        return `${val} ${label.charAt(0).toUpperCase() + label.slice(1)}`;
+        return formatDateNumeric(parseStoredDate(dateStr), this.hass!.locale);
     }
 
     // --- Actions ---
@@ -234,9 +208,16 @@ class HomeMaintenanceTodoCard extends LitElement {
     private _completeTask(task: Task) {
         if (this._completing.has(task.id)) return;
         const lang = this.hass!.language;
+        const isTime = (task.trigger_type ?? "time") === "time";
         this._confirmDialog?.open({
             heading: localize('panel.dialog.confirm_complete.title', lang),
-            message: localize('panel.dialog.confirm_complete.message_simple', lang, '{title}', task.title),
+            message: localize(
+                isTime
+                    ? 'panel.dialog.confirm_complete.message'
+                    : 'panel.dialog.confirm_complete.message_progress',
+                lang, '{title}', task.title,
+                '{interval}', isTime ? formatTriggerInterval(task, lang) : formatProgress(task),
+            ),
             confirmLabel: localize('panel.dialog.confirm_complete.actions.confirm', lang),
             cancelLabel: localize('common.cancel', lang),
             onConfirm: () => this._doCompleteTask(task),
@@ -250,8 +231,8 @@ class HomeMaintenanceTodoCard extends LitElement {
 
         const lang = this.hass!.language;
         try {
+            // No explicit reload: the subscribe_updates push refreshes the card.
             await completeTask(this.hass!, task.id);
-            await this._loadData();
             showToast(this, localize('panel.cards.current.alerts.complete_success', lang, '{title}', task.title));
         } catch (e) {
             console.error("Failed to complete task:", e);
@@ -279,7 +260,6 @@ class HomeMaintenanceTodoCard extends LitElement {
     private async _doRemoveTask(taskId: string) {
         try {
             await removeTask(this.hass!, taskId);
-            await this._loadData();
         } catch (e) {
             console.error("Failed to remove task:", e);
             showToast(this, localize('panel.cards.current.alerts.remove_error', this.hass!.language));
@@ -423,7 +403,7 @@ class HomeMaintenanceTodoCard extends LitElement {
                         <div class="task-info">
                             <div class="task-title">${task.title}${ct.completedToday ? html`<span class="done-badge">Done</span>` : nothing}</div>
                             <div class="task-meta">
-                                <span class="task-interval">${this._getIntervalLabel(task)}</span>
+                                <span class="task-interval">${formatTriggerInterval(task, this.hass!.language)}</span>
                                 ${task.group_id ? html`
                                     <span class="task-group">${task.group_id}</span>
                                 ` : nothing}

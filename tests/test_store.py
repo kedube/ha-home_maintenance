@@ -71,7 +71,12 @@ async def test_add_and_get(hass) -> None:
 
 async def test_update_task_whitelist_blocks_managed_fields(hass) -> None:
     store = TaskStore(hass)
-    task = make_task(trigger_type="count", count_threshold=5, current_count=3)
+    task = make_task(
+        trigger_type="count",
+        count_entity_id="binary_sensor.pump",
+        count_threshold=5,
+        current_count=3,
+    )
     store.add(task)
 
     store.update_task(
@@ -92,7 +97,12 @@ async def test_update_task_whitelist_blocks_managed_fields(hass) -> None:
 
 async def test_update_trigger_type_switch_reinitializes(hass) -> None:
     store = TaskStore(hass)
-    task = make_task(trigger_type="count", count_threshold=5, current_count=4)
+    task = make_task(
+        trigger_type="count",
+        count_entity_id="binary_sensor.pump",
+        count_threshold=5,
+        current_count=4,
+    )
     store.add(task)
     # add() re-initializes count tasks; simulate accumulated usage
     task.current_count = 4
@@ -110,13 +120,22 @@ async def test_update_trigger_type_switch_reinitializes(hass) -> None:
     assert task.trigger_type == "runtime"
     assert task.runtime_baseline == 250
 
-    store.update_task(task.id, {"trigger_type": "count", "count_threshold": 5})
+    store.update_task(
+        task.id,
+        {
+            "trigger_type": "count",
+            "count_entity_id": "binary_sensor.pump",
+            "count_threshold": 5,
+        },
+    )
     assert task.current_count == 0
 
 
 async def test_complete_count_task_resets_counter(hass) -> None:
     store = TaskStore(hass)
-    task = make_task(trigger_type="count", count_threshold=3)
+    task = make_task(
+        trigger_type="count", count_entity_id="binary_sensor.pump", count_threshold=3
+    )
     store.add(task)
     task.current_count = 3
 
@@ -143,7 +162,9 @@ async def test_complete_runtime_task_rebaselines(hass) -> None:
 
 async def test_increment_and_reset_count(hass) -> None:
     store = TaskStore(hass)
-    task = make_task(trigger_type="count", count_threshold=3)
+    task = make_task(
+        trigger_type="count", count_entity_id="binary_sensor.pump", count_threshold=3
+    )
     store.add(task)
 
     store.increment_count(task.id)
@@ -296,3 +317,62 @@ async def test_delete_group_moves_members_to_ungrouped(hass) -> None:
 
     assert member.group_id is None
     assert store.get_groups() == []
+
+
+async def test_load_ignores_unknown_stored_fields(hass, hass_storage) -> None:
+    """Data written by a newer version (with extra task fields) still loads."""
+    hass_storage[STORAGE_KEY] = {
+        "version": 1,
+        "minor_version": 3,
+        "key": STORAGE_KEY,
+        "data": {
+            "tasks": [
+                {
+                    "id": "home_maintenance_future",
+                    "title": "Future Task",
+                    "interval_value": 30,
+                    "interval_type": "days",
+                    "last_performed": "2026-01-01T00:00:00-05:00",
+                    "field_from_the_future": True,
+                }
+            ],
+            "groups": [],
+        },
+    }
+
+    store = TaskStore(hass)
+    await store.async_load()
+    assert store.tasks["home_maintenance_future"].title == "Future Task"
+
+
+async def test_rename_group_collision_raises(hass) -> None:
+    """Renaming onto an existing group is rejected instead of silently merging."""
+    store = TaskStore(hass)
+    store.create_group("Garage")
+    store.create_group("Basement")
+    task = make_task(group_id="Garage")
+    store.add(task)
+
+    with pytest.raises(RuntimeError, match="already exists"):
+        store.rename_group("Garage", "Basement")
+
+    assert task.group_id == "Garage"
+    assert store.get_groups() == ["Basement", "Garage"]
+
+
+async def test_add_task_validates_trigger_fields(hass) -> None:
+    """The store rejects tasks whose trigger can never fire."""
+    with pytest.raises(RuntimeError, match="runtime tasks require"):
+        TaskStore(hass).add(make_task(trigger_type="runtime"))
+
+
+async def test_update_task_validates_trigger_fields(hass) -> None:
+    """Switching trigger type without its required fields is rejected."""
+    store = TaskStore(hass)
+    task = make_task()
+    store.add(task)
+
+    with pytest.raises(RuntimeError, match="count tasks require"):
+        store.update_task(task.id, {"trigger_type": "count"})
+
+    assert task.trigger_type == "time"

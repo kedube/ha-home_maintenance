@@ -4,6 +4,57 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
+## Unreleased
+
+- Fixed: the `reset_last_performed` service recorded the wrong day for
+  timezones west of UTC when `performed_date` was given (the date was
+  interpreted as UTC midnight); it now lands on the given calendar day in
+  Home Assistant's timezone. All day-boundary math (store, triggers,
+  websocket API) is consolidated on HA's `start_of_local_day`.
+- Fixed: editing a task can no longer switch it into a state where it
+  silently never becomes due — trigger-specific required fields (count/
+  runtime entity and threshold) are now validated by the store on every
+  write path, not just when adding.
+- Fixed: renaming a group to the name of an existing group irreversibly
+  merged the two; it is now rejected with a clear error, and the Groups
+  card warns before even calling the backend.
+- Fixed: task mutations on a missing task (update, complete, remove,
+  increment, reset) now return a clean websocket error instead of an
+  unhandled exception; the same applies to any command called while the
+  integration is not loaded.
+- Fixed: stored data written by a newer version of the integration no
+  longer aborts setup (unknown task fields are dropped on load, and a
+  storage migrate hook accepts other schema versions), and the
+  integration's services are properly removed when the entry unloads.
+- Fixed: dates shown in the panel and todo card are now parsed as calendar
+  days — previously `new Date(iso)` could shift last-performed/next-due a
+  day in browser timezones that differ from Home Assistant's.
+- Performance: runtime sensors that update every few seconds no longer
+  rewrite entity state and reload every open panel on each tick — updates
+  push only when the due state flips or progress advances a whole unit.
+  The panel loads static data (HA components, tags, config) once instead
+  of on every push, the todo card no longer reloads twice after
+  complete/remove, and group rename/delete sends one change signal instead
+  of one per member task.
+- The todo card's interval labels ("Every 5 uses") are now localized
+  (English and German) like the rest of the UI.
+- Internal cleanup: task completion uses the shared confirmation dialog
+  (one dialog implementation instead of two), all dialogs work on both
+  newer and older Home Assistant footer styles, the add form and edit
+  dialog share one field renderer, shared frontend helpers replace
+  triplicated debounce/date/interval code, and dead code was removed
+  (`async_reload_entry`, `get_by_tag_id`, unused websocket wrappers, the
+  unused device id).
+- Documentation refresh: the README now describes the redesigned panel
+  layout, documents the todo card's `group` option in the YAML example, and
+  gains a Troubleshooting section (stale frontend after upgrades, component
+  conflicts, admin-only panel visibility) plus browser-smoke-test
+  instructions; docs/architecture.md covers the current frontend (three
+  bundles, uniform ha-selector field rendering, shared confirm dialog and
+  toasts, cache-busted serving, component-compatibility policy, smoke
+  test); CONTRIBUTING.md adds frontend guidelines matching what CI
+  enforces.
+
 ## 1.5.17 — 2026-08-08
 
 - HA-native feedback everywhere: all browser-native alert()/confirm()

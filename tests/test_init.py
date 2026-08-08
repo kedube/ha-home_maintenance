@@ -205,3 +205,83 @@ async def test_entity_removed_with_task(hass, setup_entry) -> None:
     data.store.delete(task.id)
     await hass.async_block_till_done()
     assert hass.states.get("binary_sensor.doomed_task") is None
+
+
+async def test_service_reset_uses_local_calendar_date(hass, setup_entry) -> None:
+    """performed_date is interpreted in HA's timezone, not as UTC."""
+    await hass.config.async_set_time_zone("America/New_York")
+
+    data: HomeMaintenanceData = hass.data[DOMAIN]
+    from custom_components.home_maintenance.store import HomeMaintenanceTask
+
+    task = HomeMaintenanceTask(
+        id="home_maintenance_tz",
+        title="Timezone Task",
+        interval_value=30,
+        interval_type="days",
+        last_performed="2020-01-01T00:00:00",
+    )
+    data.store.add(task)
+    await hass.async_block_till_done()
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_RESET,
+        {"entity_id": "binary_sensor.timezone_task", "performed_date": "2026-07-01"},
+        blocking=True,
+    )
+    # A naive-UTC interpretation would have stored 2026-06-30 here.
+    assert task.last_performed.startswith("2026-07-01")
+
+
+async def test_runtime_watcher_gates_insignificant_ticks(hass, setup_entry) -> None:
+    """Sub-unit runtime ticks don't rewrite entity state; real changes do."""
+    data: HomeMaintenanceData = hass.data[DOMAIN]
+    from custom_components.home_maintenance.store import HomeMaintenanceTask
+
+    hass.states.async_set("sensor.fan_hours", "100")
+    task = HomeMaintenanceTask(
+        id="home_maintenance_gate",
+        title="Clean Fan",
+        interval_value=1,
+        interval_type="days",
+        last_performed="2026-01-01T00:00:00",
+        trigger_type="runtime",
+        runtime_entity_id="sensor.fan_hours",
+        runtime_threshold=50,
+    )
+    data.store.add(task)
+    await hass.async_block_till_done()
+
+    entity_id = "binary_sensor.clean_fan"
+    assert hass.states.get(entity_id).attributes["runtime_delta"] == 0
+
+    # Sub-unit tick: no push, entity attributes stay put
+    hass.states.async_set("sensor.fan_hours", "100.4")
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id).attributes["runtime_delta"] == 0
+
+    # Whole-unit progress: pushed
+    hass.states.async_set("sensor.fan_hours", "101.5")
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id).attributes["runtime_delta"] == 1.5
+
+    # Crossing the threshold flips the sensor on
+    hass.states.async_set("sensor.fan_hours", "151.5")
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id).state == "on"
+
+
+async def test_unload_removes_services_and_data(hass, setup_entry) -> None:
+    """Unloading the entry deregisters services and clears hass.data."""
+    assert hass.services.has_service(DOMAIN, SERVICE_RESET)
+    assert hass.services.has_service(DOMAIN, SERVICE_INCREMENT_COUNT)
+    assert hass.services.has_service(DOMAIN, SERVICE_RESET_COUNT)
+
+    assert await hass.config_entries.async_unload(setup_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert not hass.services.has_service(DOMAIN, SERVICE_RESET)
+    assert not hass.services.has_service(DOMAIN, SERVICE_INCREMENT_COUNT)
+    assert not hass.services.has_service(DOMAIN, SERVICE_RESET_COUNT)
+    assert DOMAIN not in hass.data

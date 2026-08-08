@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import uuid
 from typing import TYPE_CHECKING, Any
 
@@ -20,6 +21,8 @@ from .const import (
 from .store import HomeMaintenanceTask
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from .store import TaskStore
 
 TRIGGER_TYPES = ["time", "count", "runtime"]
@@ -49,35 +52,50 @@ UPDATES_SCHEMA = vol.Schema(
 
 
 def _get_store(hass: HomeAssistant) -> TaskStore:
-    return hass.data[DOMAIN].store
+    data = hass.data.get(DOMAIN)
+    if data is None:
+        msg = "Home Maintenance is not loaded"
+        raise RuntimeError(msg)
+    return data.store
+
+
+type _WsHandler = Callable[
+    [HomeAssistant, connection.ActiveConnection, dict[str, Any]], None
+]
+
+
+def _handle_store_errors(handler: _WsHandler) -> _WsHandler:
+    """Map store RuntimeErrors (and not-loaded) to a clean websocket error."""
+
+    @functools.wraps(handler)
+    def wrapper(
+        hass: HomeAssistant,
+        conn: connection.ActiveConnection,
+        msg: dict[str, Any],
+    ) -> None:
+        try:
+            handler(hass, conn, msg)
+        except RuntimeError as err:
+            conn.send_error(msg["id"], "invalid_input", str(err))
+
+    return wrapper
 
 
 def _normalize_last_performed(last_str: str | None) -> str | None:
     """Return a midnight-floored local ISO date, or None if unparseable."""
-    if last_str:
-        parsed = dt_util.parse_datetime(last_str)
-        if parsed is None:
-            return None
-        parsed_local = dt_util.as_local(parsed)
-    else:
-        parsed_local = dt_util.now()
-    return parsed_local.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-
-
-def _validate_trigger_fields(msg: dict[str, Any]) -> str | None:
-    """Server-side validation of trigger-specific required fields."""
-    trigger_type = msg.get("trigger_type", "time")
-    if trigger_type == "count":
-        if not msg.get("count_entity_id") or msg.get("count_threshold", 0) <= 0:
-            return "count tasks require count_entity_id and a positive threshold"
-    elif trigger_type == "runtime" and (
-        not msg.get("runtime_entity_id") or msg.get("runtime_threshold", 0) <= 0
-    ):
-        return "runtime tasks require runtime_entity_id and a positive threshold"
-    return None
+    if not last_str:
+        return dt_util.start_of_local_day().isoformat()
+    parsed = dt_util.parse_datetime(last_str)
+    if parsed is None:
+        return None
+    # Naive datetimes are taken as local time, not UTC.
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=dt_util.get_default_time_zone())
+    return dt_util.start_of_local_day(dt_util.as_local(parsed)).isoformat()
 
 
 @callback
+@_handle_store_errors
 def websocket_get_tasks(
     hass: HomeAssistant, connection: connection.ActiveConnection, msg: dict[str, Any]
 ) -> None:
@@ -86,6 +104,7 @@ def websocket_get_tasks(
 
 
 @callback
+@_handle_store_errors
 def websocket_get_task(
     hass: HomeAssistant, connection: connection.ActiveConnection, msg: dict[str, Any]
 ) -> None:
@@ -98,10 +117,11 @@ def websocket_get_task(
 
 
 @callback
+@_handle_store_errors
 def websocket_add_task(
     hass: HomeAssistant, connection: connection.ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Add a new task."""
+    """Add a new task. The store validates trigger-specific required fields."""
     store = _get_store(hass)
 
     last_performed = _normalize_last_performed(msg.get("last_performed"))
@@ -109,10 +129,6 @@ def websocket_add_task(
         connection.send_error(
             msg["id"], "invalid_date", f"Could not parse date: {msg['last_performed']}"
         )
-        return
-
-    if (error := _validate_trigger_fields(msg)) is not None:
-        connection.send_error(msg["id"], "invalid_input", error)
         return
 
     new_task = HomeMaintenanceTask(
@@ -138,6 +154,7 @@ def websocket_add_task(
 
 
 @callback
+@_handle_store_errors
 def websocket_update_task(
     hass: HomeAssistant, connection: connection.ActiveConnection, msg: dict[str, Any]
 ) -> None:
@@ -161,6 +178,7 @@ def websocket_update_task(
 
 
 @callback
+@_handle_store_errors
 def websocket_complete_task(
     hass: HomeAssistant, connection: connection.ActiveConnection, msg: dict[str, Any]
 ) -> None:
@@ -170,6 +188,7 @@ def websocket_complete_task(
 
 
 @callback
+@_handle_store_errors
 def websocket_remove_task(
     hass: HomeAssistant, connection: connection.ActiveConnection, msg: dict[str, Any]
 ) -> None:
@@ -179,6 +198,7 @@ def websocket_remove_task(
 
 
 @callback
+@_handle_store_errors
 def websocket_increment_count(
     hass: HomeAssistant, connection: connection.ActiveConnection, msg: dict[str, Any]
 ) -> None:
@@ -188,6 +208,7 @@ def websocket_increment_count(
 
 
 @callback
+@_handle_store_errors
 def websocket_reset_count(
     hass: HomeAssistant, connection: connection.ActiveConnection, msg: dict[str, Any]
 ) -> None:
@@ -197,6 +218,7 @@ def websocket_reset_count(
 
 
 @callback
+@_handle_store_errors
 def websocket_get_groups(
     hass: HomeAssistant, connection: connection.ActiveConnection, msg: dict[str, Any]
 ) -> None:
@@ -205,41 +227,32 @@ def websocket_get_groups(
 
 
 @callback
+@_handle_store_errors
 def websocket_create_group(
     hass: HomeAssistant, connection: connection.ActiveConnection, msg: dict[str, Any]
 ) -> None:
     """Create a group."""
-    try:
-        _get_store(hass).create_group(msg["group_id"])
-    except RuntimeError as err:
-        connection.send_error(msg["id"], "invalid_input", str(err))
-        return
+    _get_store(hass).create_group(msg["group_id"])
     connection.send_result(msg["id"], {"success": True})
 
 
 @callback
+@_handle_store_errors
 def websocket_rename_group(
     hass: HomeAssistant, connection: connection.ActiveConnection, msg: dict[str, Any]
 ) -> None:
     """Rename a group, reassigning its member tasks."""
-    try:
-        _get_store(hass).rename_group(msg["old_group_id"], msg["new_group_id"])
-    except RuntimeError as err:
-        connection.send_error(msg["id"], "invalid_input", str(err))
-        return
+    _get_store(hass).rename_group(msg["old_group_id"], msg["new_group_id"])
     connection.send_result(msg["id"], {"success": True})
 
 
 @callback
+@_handle_store_errors
 def websocket_delete_group(
     hass: HomeAssistant, connection: connection.ActiveConnection, msg: dict[str, Any]
 ) -> None:
     """Delete a group, moving its member tasks to ungrouped."""
-    try:
-        _get_store(hass).delete_group(msg["group_id"])
-    except RuntimeError as err:
-        connection.send_error(msg["id"], "invalid_input", str(err))
-        return
+    _get_store(hass).delete_group(msg["group_id"])
     connection.send_result(msg["id"], {"success": True})
 
 

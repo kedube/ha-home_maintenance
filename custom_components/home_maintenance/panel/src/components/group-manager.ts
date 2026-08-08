@@ -49,8 +49,17 @@ class HMGroupManager extends LitElement {
     private async _handleRename() {
         const oldGroup = this._renamingGroup;
         const newGroup = this._renameValue.trim();
+        if (!oldGroup || !newGroup || oldGroup === newGroup) {
+            this._renamingGroup = null;
+            return;
+        }
+        if (this.groups.includes(newGroup)) {
+            // Renaming onto an existing group would merge them; the backend
+            // rejects it, so surface the conflict without closing the editor.
+            showToast(this, localize('panel.cards.groups.alerts.exists', this.hass!.language, '{title}', newGroup));
+            return;
+        }
         this._renamingGroup = null;
-        if (!oldGroup || !newGroup || oldGroup === newGroup) return;
         try {
             await renameGroup(this.hass!, oldGroup, newGroup);
         } catch (e) {

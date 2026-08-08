@@ -5,6 +5,7 @@ import { formatDateNumeric } from "custom-card-helpers";
 
 import { localize } from '../../localize/localize';
 import { commonStyle } from '../styles';
+import { formatProgress, formatTimeInterval, parseStoredDate } from '../util';
 import { EntityRegistryEntry, Label, Task } from '../types';
 import { mdiCheckCircleOutline } from "@mdi/js";
 import './hm-task-menu'
@@ -77,12 +78,9 @@ class HMTaskTable extends LitElement {
                 maxWidth: "100px",
                 template: (task: any) => {
                     if (task.trigger_type !== "time") {
-                        return `${task.progress_current ?? 0} / ${task.progress_target ?? 0}`;
+                        return formatProgress(task);
                     }
-                    const type = task.interval_type;
-                    const isSingular = task.interval_value === 1;
-                    const labelKey = isSingular ? type.slice(0, -1) : type;
-                    return `${task.interval_value} ${localize(`intervals.${labelKey}`, this.hass!.language)}`;
+                    return formatTimeInterval(task.interval_value, task.interval_type, this.hass!.language);
                 }
             },
             last_performed: {
@@ -93,7 +91,7 @@ class HMTaskTable extends LitElement {
                 maxWidth: "150px",
                 template: (task: any) => {
                     if (task.trigger_type !== "time" || !task.last_performed) return "-";
-                    return formatDateNumeric(new Date(task.last_performed), this.hass!.locale);
+                    return formatDateNumeric(parseStoredDate(task.last_performed), this.hass!.locale);
                 }
             },
             next_due: {
@@ -108,7 +106,7 @@ class HMTaskTable extends LitElement {
                     if (task.trigger_type !== "time") {
                         return html`
                             <span style=${style}>
-                                ${task.progress_current ?? 0} / ${task.progress_target ?? 0}
+                                ${formatProgress(task)}
                             </span>`;
                     }
                     if (!task.next_due_date) return "—";
@@ -203,7 +201,7 @@ class HMTaskTable extends LitElement {
             trigger_type: task.trigger_type ?? "time",
             // Sort keys: remaining progress for count/runtime, days for time.
             interval_days: this._intervalSortKey(task),
-            next_due_date: task.next_due ? new Date(task.next_due) : null,
+            next_due_date: task.next_due ? parseStoredDate(task.next_due) : null,
             next_due: this._dueSortKey(task),
             tagIcon: task.tag_id && task.tag_id.trim() !== "" ? "mdi:tag" : undefined,
         };
@@ -261,7 +259,7 @@ class HMTaskTable extends LitElement {
     }
 
     private _dueSortKey(task: Task): Date {
-        if (task.next_due) return new Date(task.next_due);
+        if (task.next_due) return parseStoredDate(task.next_due);
         return task.due ? new Date(0) : FAR_FUTURE;
     }
 

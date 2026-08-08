@@ -48,6 +48,13 @@ People *love* thorough bug reports. I'm not even kidding.
 
 Use [ruff](https://docs.astral.sh/ruff/) to make sure the code follows the style — `scripts/lint` runs `ruff format` and `ruff check --fix` for you, and CI enforces both on every pull request.
 
+## Frontend guidelines
+
+- Build UI only from current Home Assistant components — `ha-selector`, `ha-form`, `ha-button`, `ha-dialog`, `ha-dropdown`. Legacy elements (`mwc-*`, `ha-textfield`, `ha-formfield`, `ha-md-*`, `paper-*`) break silently when Home Assistant deletes them, and CI fails if they appear in `panel/src/`.
+- User feedback goes through toasts (`src/toast.ts`) and the shared `hm-confirm-dialog` — never browser-native `alert()`/`confirm()`, which the companion apps can suppress.
+- Form fields render as bare `ha-selector`s with a uniform label above each input (see `task-form.ts`); follow that pattern so inputs stay aligned.
+- New user-facing strings go into both `localize/languages/en.json` and `de.json`.
+
 ## Test your code modification
 
 This custom component is based on [integration_blueprint template](https://github.com/ludeeus/integration_blueprint).
@@ -57,6 +64,16 @@ if you use Visual Studio Code. With this container you will have a stand alone
 Home Assistant instance running and already configured with the included
 [`configuration.yaml`](./config/configuration.yaml)
 file.
+
+Outside the container, `scripts/develop` runs the same standalone Home Assistant
+with the integration symlinked in. For UI changes, the browser smoke test drives
+the real panel headlessly (CI runs it on every pull request):
+
+```sh
+pip install homeassistant colorlog playwright
+python -m playwright install chromium
+python scripts/e2e_smoke.py --install-deps
+```
 
 ## License
 

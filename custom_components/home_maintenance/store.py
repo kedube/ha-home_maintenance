@@ -20,7 +20,9 @@ STORAGE_VERSION_MINOR = 3
 SAVE_DELAY = 1.0
 
 # Fields a websocket update may modify. Everything else — id, current_count,
-# runtime_baseline — is managed by the integration itself.
+# runtime_baseline — is managed by the integration itself. "labels" is
+# intentionally absent: labels live in the entity registry, not on the task,
+# so update_task applies them to the registry entry instead.
 ALLOWED_UPDATE_FIELDS = {
     "title",
     "trigger_type",
@@ -70,6 +72,26 @@ def normalize_group_id(group_id: str | None) -> str | None:
     return normalized or None
 
 
+class _TaskStorage(storage.Store):
+    """
+    Store that accepts data written by any other schema version.
+
+    async_load handles the stored shapes itself (a bare task list before
+    1.3, a tasks/groups dict since) and ignores unknown task fields, so no
+    transformation is needed here — but without this hook HA's Store raises
+    NotImplementedError when the stored major version differs (e.g. after
+    a downgrade from a future release).
+    """
+
+    async def _async_migrate_func(
+        self,
+        old_major_version: int,  # noqa: ARG002
+        old_minor_version: int,  # noqa: ARG002
+        old_data: dict | list,
+    ) -> dict | list:
+        return old_data
+
+
 class TaskStore:
     """
     Holds home maintenance task data — the single source of truth.
@@ -82,7 +104,7 @@ class TaskStore:
     def __init__(self, hass: HomeAssistant) -> None:
         """Initialize the storage."""
         self.hass = hass
-        self._store = storage.Store(
+        self._store = _TaskStorage(
             hass,
             STORAGE_VERSION_MAJOR,
             STORAGE_KEY,
@@ -105,9 +127,14 @@ class TaskStore:
             task_items = data.get("tasks", [])
             group_items = data.get("groups", [])
 
-        # Fields added after a task was stored fall back to the attrs defaults.
+        # Fields added after a task was stored fall back to the attrs
+        # defaults; unknown stored fields (e.g. written by a newer version)
+        # are dropped instead of aborting setup with a TypeError.
+        known_fields = {field.name for field in attr.fields(HomeMaintenanceTask)}
         self._tasks = {
-            task_data["id"]: HomeMaintenanceTask(**task_data)
+            task_data["id"]: HomeMaintenanceTask(
+                **{k: v for k, v in task_data.items() if k in known_fields}
+            )
             for task_data in task_items
         }
         # Groups in use by tasks always exist, even if the stored list lags.
@@ -182,20 +209,10 @@ class TaskStore:
             if t.tag_id and tag_uuids.get(t.tag_id) == tag_uuid
         ]
 
-    def get_by_tag_id(self, tag_id: str) -> list[dict]:
-        """Get tasks by tag id."""
-        return [attr.asdict(t) for t in self._tasks.values() if t.tag_id == tag_id]
-
     def _entity_id_for(self, task_id: str) -> str | None:
         """Resolve a task's entity_id from the entity registry."""
         registry = entity_registry.async_get(self.hass)
         return registry.async_get_entity_id("binary_sensor", const.DOMAIN, task_id)
-
-    @staticmethod
-    def _midnight_isoformat(performed_date: datetime) -> str:
-        return performed_date.replace(
-            hour=0, minute=0, second=0, microsecond=0
-        ).isoformat()
 
     def get_groups(self) -> list[str]:
         """Get all group names, sorted."""
@@ -226,6 +243,10 @@ class TaskStore:
         if old_normalized == new_normalized:
             return
 
+        if new_normalized in self._groups:
+            msg = f'A group named "{new_normalized}" already exists.'
+            raise RuntimeError(msg)
+
         self._groups.discard(old_normalized)
         self._groups.add(new_normalized)
         self._reassign_group_members(old_normalized, new_normalized)
@@ -242,17 +263,13 @@ class TaskStore:
 
     def _reassign_group_members(self, from_group: str, to_group: str | None) -> None:
         """Move every task in from_group to to_group, then save and announce."""
-        changed = [
-            task_id
-            for task_id, task in self._tasks.items()
-            if normalize_group_id(task.group_id) == from_group
-        ]
-        for task_id in changed:
-            self._tasks[task_id].group_id = to_group
+        for task in self._tasks.values():
+            if normalize_group_id(task.group_id) == from_group:
+                task.group_id = to_group
 
         self._save()
-        for task_id in changed:
-            async_dispatcher_send(self.hass, const.SIGNAL_TASK_UPDATED, task_id)
+        # A group change is invisible to the entities (group_id is not part of
+        # entity state), so a single catch-all is enough — no per-task signals.
         async_dispatcher_send(self.hass, const.SIGNAL_TASKS_CHANGED)
 
     def _register_task_group(self, task: HomeMaintenanceTask) -> None:
@@ -263,6 +280,10 @@ class TaskStore:
 
     def add(self, task: HomeMaintenanceTask, labels: list[str] | None = None) -> str:
         """Add a new task and announce it."""
+        error = get_trigger(task.trigger_type).validate(attr.asdict(task))
+        if error is not None:
+            raise RuntimeError(error)
+
         get_trigger(task.trigger_type).initialize(self.hass, task)
         self._register_task_group(task)
         self._tasks[task.id] = task
@@ -290,6 +311,19 @@ class TaskStore:
         if task is None:
             msg = "Task not found."
             raise RuntimeError(msg)
+
+        # Validate the post-update trigger fields before mutating anything, so
+        # a task can never be switched into a state where it silently never
+        # becomes due (e.g. count trigger without an entity).
+        merged = attr.asdict(task)
+        merged.update(
+            (key, value)
+            for key, value in updated.items()
+            if key in ALLOWED_UPDATE_FIELDS
+        )
+        error = get_trigger(merged["trigger_type"]).validate(merged)
+        if error is not None:
+            raise RuntimeError(error)
 
         previous_trigger = task.trigger_type
 
@@ -327,9 +361,9 @@ class TaskStore:
             msg = "Task not found."
             raise RuntimeError(msg)
 
-        task.last_performed = self._midnight_isoformat(
-            performed_date if performed_date is not None else dt_util.now()
-        )
+        task.last_performed = dt_util.start_of_local_day(
+            dt_util.as_local(performed_date) if performed_date is not None else None
+        ).isoformat()
         get_trigger(task.trigger_type).on_complete(self.hass, task)
 
         self._save()

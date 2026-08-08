@@ -34,7 +34,7 @@ Owns the `HomeMaintenanceTask` attrs objects, persists them with HA's `Store` he
 | `SIGNAL_TASK_REMOVED` | `(task_id,)` | task deleted |
 | `SIGNAL_TASKS_CHANGED` | — | catch-all, after any of the above |
 
-`update_task` applies only fields in `ALLOWED_UPDATE_FIELDS` — managed fields (`id`, `current_count`, `runtime_baseline`) cannot be set through the API. Switching a task's `trigger_type` re-runs the new trigger's `initialize` (counter reset / baseline capture).
+`update_task` applies only fields in `ALLOWED_UPDATE_FIELDS` — managed fields (`id`, `current_count`, `runtime_baseline`) cannot be set through the API. (`labels` is deliberately not in the whitelist: labels live in the entity registry, and `update_task` applies them there instead.) Both `add` and `update_task` run the trigger's `validate` before mutating anything, so no write path can produce a task whose trigger can never fire (e.g. a count task without an entity). Switching a task's `trigger_type` re-runs the new trigger's `initialize` (counter reset / baseline capture). `rename_group` refuses to rename onto an existing group rather than silently merging the two. Storage loads tolerate data written by other versions: unknown task fields are dropped, missing ones fall back to the attrs defaults, and a migrate hook accepts old major/minor layouts. Failures raise `RuntimeError`, which the websocket layer maps to clean API errors.
 
 `serialize(task)` extends the raw task dict with computed trigger state — `due`, `next_due`, `progress_current`, `progress_target` — which is what the websocket API returns. The panel renders these values and never reimplements trigger semantics.
 
@@ -45,10 +45,13 @@ All per-trigger-type behavior lives here, one strategy class per type (`time`, `
 | Method | Responsibility |
 | --- | --- |
 | `is_due` / `next_due` / `progress` | when the task is due and how close it is |
+| `validate` | required trigger fields, enforced by the store on add and update |
 | `initialize` | state setup on create or trigger-type switch |
 | `on_complete` | effects of completing (reset counter, re-baseline) |
 | `watched_entity` | which entity the trigger monitors, if any |
 | `extra_attributes` | trigger-specific entity attributes |
+
+Day-boundary math (a task is due on a calendar day, not at an instant) goes through `dt_util.start_of_local_day` everywhere — store, triggers, and the websocket layer share the same flooring.
 
 The store, entities, and websocket serialization all call through `get_trigger(trigger_type)` — changing trigger semantics is a one-file edit.
 
@@ -60,9 +63,9 @@ Entities are thin views over the store's task objects (`_attr_should_poll = Fals
 
 `async_setup_entry` builds a typed `HomeMaintenanceData` dataclass (store, device id, watcher unsubscribes) stored on `entry.runtime_data` and mirrored at `hass.data[DOMAIN]` for non-entry-scoped consumers (websocket handlers, panel).
 
-Count/runtime tasks are served by **targeted** state listeners: `async_track_state_change_event` subscribed to exactly the watched entity ids, rebuilt (via `SIGNAL_TASKS_CHANGED`) only when the watched set actually changes. The count watcher increments on `off → on` transitions; the runtime watcher persists a baseline reset when the sensor's value drops below the recorded baseline, and otherwise pushes a `SIGNAL_TASK_UPDATED` so entity and panel refresh.
+Count/runtime tasks are served by **targeted** state listeners: `async_track_state_change_event` subscribed to exactly the entity ids the triggers report via `watched_entity`, rebuilt (via `SIGNAL_TASKS_CHANGED`) only when the watched set actually changes. The count watcher increments on `off → on` transitions; the runtime watcher persists a baseline reset when the sensor's value drops below the recorded baseline, and pushes a `SIGNAL_TASK_UPDATED` only when the change is worth announcing — a due-state flip or a whole-unit progress change — so a sensor ticking every few seconds doesn't rewrite entity state and reload every open panel on each tick.
 
-Services (`reset_last_performed`, `increment_count`, `reset_count`) resolve the target task id through the entity registry and delegate to the store.
+Services (`reset_last_performed`, `increment_count`, `reset_count`) resolve the target task id through the entity registry and delegate to the store; they are deregistered again when the entry unloads.
 
 ### `websocket.py` — API
 
@@ -77,20 +80,33 @@ Services (`reset_last_performed`, `increment_count`, `reset_count`) resolve the 
 | `home_maintenance/subscribe_updates` | push channel — an event per `SIGNAL_TASKS_CHANGED` |
 | `home_maintenance/get_config` | config entry data/options plus the integration version |
 
+Every store-touching handler is wrapped by a decorator that maps `RuntimeError` (missing task, group collision, invalid trigger fields, integration not loaded) to an `invalid_input` websocket error instead of an unhandled exception.
+
 ## Frontend (`panel/`)
 
-A Lit + TypeScript app bundled with esbuild into the committed `dist/main.js` (served by `panel.py` as a sidebar panel).
+A Lit + TypeScript app bundled with esbuild into three committed bundles under `dist/`: `main.js` (the sidebar panel) plus `todo-card.js` and `add-task-card.js` (Lovelace cards, injected on every dashboard via `add_extra_js_url`). `panel.py` serves them from a static path with long-lived cache headers; the URLs carry a `?v=<VERSION>` query string, so every release is a fresh URL and browsers never reuse a stale bundle after an upgrade.
 
-- `src/main.ts` — orchestrator: loads data (in parallel), subscribes to `subscribe_updates` with a short debounce so **any** change — panel action, NFC scan, service call, automation — refreshes the UI live, and wires the components together.
+- `src/main.ts` — orchestrator: subscribes to `subscribe_updates` with a short debounce so **any** change — panel action, NFC scan, service call, automation — refreshes the UI live, and wires the components together. Static data (HA components, tags, config) loads once; the push path refetches only what mutations can change (tasks, groups, registries). Task removal and completion confirm through the shared confirm dialog; feedback surfaces as toasts.
 - `src/components/task-table.ts` — the task list; renders backend-computed `due`/`next_due`/`progress` values, memoizes rows/columns so `ha-data-table` gets stable references across the frequent `hass` re-renders. Emits `task-complete` / `task-menu-action`.
-- `src/components/task-form.ts` — the Add New Task card.
-- `src/components/edit-dialog.ts` — the edit dialog (open via `open(taskId)`).
+- `src/components/task-form.ts` — the Add New Task card, rendered through the shared task-field renderer in a responsive grid (all main fields on one line on a wide card).
+- `src/components/edit-dialog.ts` — the edit dialog (open via `open(taskId)`); same shared field rendering as the add form.
+- `src/components/task-fields.ts` — the shared field renderer: every field is a bare `ha-selector` with a uniform label above the input, so inputs line up regardless of whether a selector draws its own label inside or above the input.
+- `src/components/group-manager.ts` — the Groups card (create, rename, delete — deletion confirmed via the shared dialog).
+- `src/components/confirm-dialog.ts` — generic `ha-dialog` confirmation used for every destructive or consequential action (removal, group deletion, completion).
+- `src/components/move-dialog.ts` — the move-to-group dialog.
 - `src/components/hm-task-menu.ts` — the per-row actions dropdown (HA 2026.3 `ha-dropdown` based).
-- `src/schema.ts` — the single home for form schemas, validation, and websocket payload construction, shared by add and edit.
+- `src/toast.ts` — `hass-notification` helper. All user feedback goes through toasts and dialogs — never browser-native `alert()`/`confirm()`, which look foreign and can be silently suppressed by the companion apps.
+- `src/util.ts` — shared helpers: TZ-safe parsing of the backend's stored dates (`parseStoredDate` — `new Date(iso)` would shift local midnights through the browser timezone), localized interval/progress labels, the reload `Debouncer`, and `dialogFooter`, which renders dialog buttons through `ha-dialog-footer` on newer HA and falls back to direct action slots on older HA (used by every dialog).
+- `src/schema.ts` — the single home for form field definitions, validation, and websocket payload construction, shared by the add form and edit dialog.
+- `src/todo-card.ts` / `src/add-task-card.ts` — the Lovelace cards; their config editors are schema-driven `ha-form`, and `add-task-card` reuses `hm-task-form` wholesale.
 - `src/data/websockets.ts` — typed websocket calls.
 - `localize/` — translations (English and German), bundled at build time.
 
-Dependencies are exact-pinned with a committed `package-lock.json`; CI builds with `npm ci` and fails if the committed bundle drifts from the sources.
+Dependencies are exact-pinned with a committed `package-lock.json`; CI builds with `npm ci` and fails if the committed bundles drift from the sources.
+
+### Component compatibility
+
+Home Assistant is deleting its legacy (Material Web Components era) elements release by release — `mwc-button`/`ha-md-menu` went in 2026.3 (#122), `ha-textfield` after that — and each removal silently blanks whatever still renders one. The panel therefore builds exclusively on current components (`ha-selector`, `ha-form`, `ha-button`, `ha-dialog`, `ha-dropdown`), and CI greps the sources for banned legacy elements (`mwc-*`, `ha-textfield`, `ha-formfield`, `ha-md-*`, `paper-*`) so they cannot creep back. The browser smoke test (below) exists to catch the next removal before users do.
 
 ## Versioning and releases
 
@@ -109,3 +125,7 @@ The version lives in `const.py` (`VERSION`) and `manifest.json`, kept in lockste
 - `test_release_scripts.py` — the release automation scripts
 
 The panel registration is stubbed in the `setup_entry` fixture (`tests/conftest.py`) so backend tests don't need the HTTP stack; `home-assistant-frontend` is still installed because the manifest's `panel_custom` dependency makes HA import it during setup. A weekly non-blocking CI job (`ha-next`) reruns the suite against the newest Home Assistant pre-release as an early warning for upstream breaking changes.
+
+### Browser smoke test
+
+pytest cannot see the class of breakage where Home Assistant removes a frontend component and part of the panel silently stops rendering. `scripts/e2e_smoke.py` covers that gap and runs as a blocking CI job: it boots a throwaway Home Assistant with a minimal config (`frontend:` + `config:` — deliberately not `default_config`, which would pip-install dozens of integration requirements on a cold environment), completes onboarding through the REST API, then drives the real UI with headless chromium — logs in, asserts every form input renders, adds a task, and creates a group. `--install-deps` resolves the packages the HA frontend needs on a bare `pip install homeassistant` by walking the installed HA's own component manifests, so the pins are always correct for the HA version under test (including the pre-releases the `ha-next` job feeds it). Only real JavaScript errors (`TypeError`, `ReferenceError`, …) and failed assertions fail the run; HA-core promise-rejection noise is printed as warnings. On failure the job log includes the Home Assistant output tail, and the panel screenshot is uploaded as a run artifact either way.

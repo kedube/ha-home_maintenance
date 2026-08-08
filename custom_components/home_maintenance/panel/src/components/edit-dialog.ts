@@ -5,7 +5,9 @@ import type { HomeAssistant } from "custom-card-helpers";
 import { localize } from '../../localize/localize';
 import { commonStyle } from '../styles';
 import { showToast } from '../toast';
+import { dialogFooter } from '../util';
 import { loadTask, updateTask } from '../data/websockets';
+import { renderTaskField, taskFieldStyles } from './task-fields';
 import {
     basicFields,
     computeISODate,
@@ -20,8 +22,8 @@ import { EntityRegistryEntry, Label, TaskFormData } from '../types';
 
 /**
  * The edit-task dialog. Call open(taskId) to load a task and show it.
- * Fields render as bare ha-selectors with a uniform label above each one
- * (matching hm-task-form), so inputs line up regardless of selector style.
+ * Fields render through the shared task-field renderer (matching
+ * hm-task-form), so inputs line up regardless of selector style.
  */
 class HMEditDialog extends LitElement {
     @property() hass?: HomeAssistant;
@@ -43,22 +45,6 @@ class HMEditDialog extends LitElement {
             this._taskId = task.id;
         } catch (e) {
             console.error("Failed to fetch task for edit:", e);
-        }
-    }
-
-    private _computeLabel = (schema: { name: string }): string => {
-        try {
-            return localize(`panel.dialog.edit_task.fields.${schema.name}.heading`, this.hass!.language) ?? schema.name;
-        } catch {
-            return schema.name;
-        }
-    }
-
-    private _computeHelper = (schema: { name: string }): string => {
-        try {
-            return localize(`panel.dialog.edit_task.fields.${schema.name}.helper`, this.hass!.language) ?? "";
-        } catch {
-            return "";
         }
     }
 
@@ -93,26 +79,17 @@ class HMEditDialog extends LitElement {
         this._formData = emptyTaskFormData();
     }
 
-    private _handleFieldChanged(name: string, ev: CustomEvent) {
+    private _handleFieldChanged = (name: string, ev: CustomEvent) => {
         ev.stopPropagation();
         this._formData = { ...this._formData, [name]: ev.detail.value };
     }
 
-    private _renderField = (field: any) => html`
-        <div class="field ${field.name}">
-            <div class="field-label">
-                ${this._computeLabel(field)}${field.required ? " *" : ""}
-            </div>
-            <ha-selector
-                .hass=${this.hass}
-                .selector=${field.selector}
-                .value=${(this._formData as any)[field.name]}
-                .helper=${this._computeHelper(field)}
-                .required=${field.required ?? false}
-                @value-changed=${(e: CustomEvent) => this._handleFieldChanged(field.name, e)}
-            ></ha-selector>
-        </div>
-    `;
+    private _renderField = (field: any) => renderTaskField({
+        hass: this.hass!,
+        keyPrefix: 'panel.dialog.edit_task.fields',
+        data: this._formData,
+        onChange: this._handleFieldChanged,
+    }, field);
 
     render() {
         if (!this.hass || !this._taskId) return html``;
@@ -138,46 +115,24 @@ class HMEditDialog extends LitElement {
                     ${this._renderField(descriptionField(true))}
                 </div>
 
-                <ha-dialog-footer slot="footer">
-                    <ha-button data-dialog="close" appearance="plain" slot="secondaryAction">
+                ${dialogFooter(html`
+                    <ha-button
+                        data-dialog="close"
+                        appearance="plain"
+                        slot="secondaryAction"
+                        @click=${this._close}
+                    >
                         ${localize('panel.dialog.edit_task.actions.cancel', lang)}
                     </ha-button>
                     <ha-button slot="primaryAction" @click=${this._handleSaveClick}>
                         ${localize('panel.dialog.edit_task.actions.save', lang)}
                     </ha-button>
-                </ha-dialog-footer>
+                `)}
             </ha-dialog>
         `;
     }
 
-    static styles = [commonStyle, css`
-        .fields-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-            column-gap: 8px;
-            row-gap: 16px;
-            align-items: start;
-        }
-
-        .field-label {
-            font-size: 12px;
-            font-weight: 500;
-            color: var(--secondary-text-color);
-            margin-bottom: 4px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .field ha-selector {
-            display: block;
-            width: 100%;
-        }
-
-        .field.description {
-            grid-column: 1 / -1;
-        }
-
+    static styles = [commonStyle, taskFieldStyles, css`
         .section-label {
             font-weight: 500;
             color: var(--secondary-text-color);

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import TYPE_CHECKING
 
 from homeassistant.components.binary_sensor import DOMAIN as PLATFORM
@@ -25,13 +24,15 @@ from .panel import (
     async_unregister_panel,
 )
 from .store import TaskStore
-from .triggers import UNAVAILABLE_STATES
+from .triggers import UNAVAILABLE_STATES, get_trigger
 from .websocket import async_register_websockets
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import CALLBACK_TYPE
     from homeassistant.helpers.typing import ConfigType
+
+    from .store import HomeMaintenanceTask
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -43,7 +44,6 @@ class HomeMaintenanceData:
     """Runtime data for the Home Maintenance config entry."""
 
     store: TaskStore
-    device_id: str
     unsub_watchers: list[CALLBACK_TYPE] = field(default_factory=list)
     watched_entities: frozenset[str] = frozenset()
 
@@ -66,7 +66,7 @@ async def async_setup_entry(
 
     # Register Device
     device_registry = dr.async_get(hass)
-    device = device_registry.async_get_or_create(
+    device_registry.async_get_or_create(
         config_entry_id=entry.entry_id,
         identifiers={(const.DOMAIN, const.DEVICE_KEY)},
         name=const.NAME,
@@ -75,7 +75,7 @@ async def async_setup_entry(
         manufacturer=const.MANUFACTURER,
     )
 
-    data = HomeMaintenanceData(store=task_store, device_id=device.id)
+    data = HomeMaintenanceData(store=task_store)
     entry.runtime_data = data
     # Websocket handlers and the panel are not entry-scoped; give them a
     # typed handle to the same runtime data.
@@ -143,16 +143,14 @@ async def async_unload_entry(
         return False
 
     async_unregister_panel(hass)
+    for service in (
+        const.SERVICE_RESET,
+        const.SERVICE_INCREMENT_COUNT,
+        const.SERVICE_RESET_COUNT,
+    ):
+        hass.services.async_remove(const.DOMAIN, service)
     hass.data.pop(const.DOMAIN, None)
     return True
-
-
-async def async_reload_entry(
-    hass: HomeAssistant, entry: HomeMaintenanceConfigEntry
-) -> None:
-    """Handle reload of a config entry."""
-    await async_unload_entry(hass, entry)
-    await async_setup_entry(hass, entry)
 
 
 async def async_remove_entry(
@@ -194,8 +192,9 @@ def register_services(hass: HomeAssistant) -> None:
             if parsed_date is None:
                 msg = f"Could not parse performed_date: {performed_date_str}"
                 raise ValueError(msg)
-            combined_date = datetime.combine(parsed_date, datetime.min.time())
-            performed_date = dt_util.as_local(combined_date)
+            # Midnight of the given calendar date in the *local* timezone —
+            # naive-datetime + as_local would have treated the date as UTC.
+            performed_date = dt_util.start_of_local_day(parsed_date)
 
         task_id = _task_id_for_entity(hass, entity_id)
         if task_id is None:
@@ -241,14 +240,33 @@ def register_services(hass: HomeAssistant) -> None:
 
 
 def _watched_entities(store: TaskStore) -> frozenset[str]:
-    """Return the set of entity ids referenced by count/runtime tasks."""
-    watched: set[str] = set()
-    for task in store.tasks.values():
-        if task.trigger_type == "count" and task.count_entity_id:
-            watched.add(task.count_entity_id)
-        elif task.trigger_type == "runtime" and task.runtime_entity_id:
-            watched.add(task.runtime_entity_id)
-    return frozenset(watched)
+    """Return the set of entity ids the tasks' triggers monitor."""
+    return frozenset(
+        entity_id
+        for task in store.tasks.values()
+        if (entity_id := get_trigger(task.trigger_type).watched_entity(task))
+    )
+
+
+def _runtime_change_is_meaningful(
+    task: HomeMaintenanceTask, old_value: float | None, new_value: float
+) -> bool:
+    """
+    Whether a runtime sensor tick warrants a refresh push.
+
+    Runtime sensors can update every few seconds; pushing every tick rewrites
+    the entity state and reloads every open panel each time. Only a due-state
+    flip or a whole-unit progress change is worth announcing.
+    """
+    baseline = task.runtime_baseline
+    if old_value is None or old_value < baseline:
+        return True
+    old_delta = old_value - baseline
+    new_delta = new_value - baseline
+    threshold = task.runtime_threshold
+    if threshold > 0 and (old_delta >= threshold) != (new_delta >= threshold):
+        return True
+    return int(old_delta) != int(new_delta)
 
 
 @callback
@@ -269,10 +287,13 @@ def _async_setup_watchers(hass: HomeAssistant, data: HomeMaintenanceData) -> Non
     count_map: dict[str, list[str]] = {}
     runtime_map: dict[str, list[str]] = {}
     for task in store.tasks.values():
-        if task.trigger_type == "count" and task.count_entity_id:
-            count_map.setdefault(task.count_entity_id, []).append(task.id)
-        elif task.trigger_type == "runtime" and task.runtime_entity_id:
-            runtime_map.setdefault(task.runtime_entity_id, []).append(task.id)
+        entity_id = get_trigger(task.trigger_type).watched_entity(task)
+        if not entity_id:
+            continue
+        if task.trigger_type == "count":
+            count_map.setdefault(entity_id, []).append(task.id)
+        elif task.trigger_type == "runtime":
+            runtime_map.setdefault(entity_id, []).append(task.id)
 
     if count_map:
 
@@ -304,6 +325,13 @@ def _async_setup_watchers(hass: HomeAssistant, data: HomeMaintenanceData) -> Non
                 value = float(new_state.state)
             except (ValueError, TypeError):
                 return
+            old_state = event.data.get("old_state")
+            old_value: float | None = None
+            if old_state is not None and old_state.state not in UNAVAILABLE_STATES:
+                try:
+                    old_value = float(old_state.state)
+                except (ValueError, TypeError):
+                    old_value = None
             for task_id in runtime_map.get(event.data["entity_id"], []):
                 task = store.tasks.get(task_id)
                 if task is None:
@@ -312,7 +340,7 @@ def _async_setup_watchers(hass: HomeAssistant, data: HomeMaintenanceData) -> Non
                     # External sensor reset — persist a fresh baseline
                     _LOGGER.debug("Runtime reset detected for task %s", task_id)
                     store.update_runtime_baseline(task_id, 0)
-                else:
+                elif _runtime_change_is_meaningful(task, old_value, value):
                     # Push the new delta to the entity and panel
                     async_dispatcher_send(hass, const.SIGNAL_TASK_UPDATED, task_id)
 

@@ -2,6 +2,7 @@ import { LitElement, html } from "lit";
 import { state } from "lit/decorators.js";
 
 import { commonStyle } from '../styles';
+import { dialogFooter } from '../util';
 
 export interface ConfirmOptions {
     heading: string;
@@ -58,10 +59,6 @@ class HMConfirmDialog extends LitElement {
     render() {
         if (!this._opts) return html``;
 
-        // Newer HA dialogs slot buttons through ha-dialog-footer; older ones
-        // slot action buttons directly. Support both.
-        const hasFooter = Boolean(customElements.get("ha-dialog-footer"));
-
         return html`
             <ha-dialog
                 open
@@ -70,9 +67,7 @@ class HMConfirmDialog extends LitElement {
             >
                 <p>${this._opts.message}</p>
 
-                ${hasFooter
-                    ? html`<ha-dialog-footer slot="footer">${this._renderButtons()}</ha-dialog-footer>`
-                    : this._renderButtons()}
+                ${dialogFooter(this._renderButtons())}
             </ha-dialog>
         `;
     }

@@ -51,18 +51,6 @@ export const updateTask = (hass: HomeAssistant, payload: Record<string, any>): P
         ...payload,
     })
 
-export const incrementCount = (hass: HomeAssistant, id: string): Promise<void> =>
-    hass.callWS({
-        type: 'home_maintenance/increment_count',
-        task_id: id,
-    })
-
-export const resetCount = (hass: HomeAssistant, id: string): Promise<void> =>
-    hass.callWS({
-        type: 'home_maintenance/reset_count',
-        task_id: id,
-    })
-
 export const loadGroups = (hass: HomeAssistant): Promise<string[]> =>
     hass.callWS({
         type: 'home_maintenance/get_groups',
