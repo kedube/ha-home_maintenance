@@ -4,7 +4,7 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
-## Unreleased
+## 1.5.18 — 2026-08-08
 
 - Fixed: the `reset_last_performed` service recorded the wrong day for
   timezones west of UTC when `performed_date` was given (the date was
