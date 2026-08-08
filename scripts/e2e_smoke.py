@@ -19,6 +19,7 @@ one running playwright.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -232,15 +233,20 @@ def drive_panel(base: str) -> tuple[list[str], list[str]]:
 
         page.goto(f"{base}/home-maintenance", wait_until="networkidle")
         page.wait_for_selector("hm-task-form", timeout=30000)
-        time.sleep(2)
 
-        # Every input the panel depends on must actually render.
+        # Every input the panel depends on must actually render. Wait for
+        # each selector rather than sleeping a fixed interval and counting:
+        # slow CI runners can take several seconds after the panel attaches
+        # to load the HA component chunks that render the fields, and a
+        # too-early census reports 0 for a panel that works fine.
         for name, selector, minimum in [
             ("task form fields", "hm-task-form ha-selector", 5),
             ("task title input", "hm-task-form ha-selector input", 1),
             ("group name input", "hm-group-manager ha-selector input", 1),
             ("group create button", "hm-group-manager ha-button", 1),
         ]:
+            with contextlib.suppress(Exception):
+                page.wait_for_selector(selector, state="attached", timeout=30000)
             count = page.locator(selector).count()
             if count < minimum:
                 errors.append(
