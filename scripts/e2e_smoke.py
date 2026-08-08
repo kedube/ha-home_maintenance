@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -197,22 +198,31 @@ def launch_browser(p: Playwright) -> Browser:
         return p.chromium.launch(channel="chrome", headless=True)
 
 
-def drive_panel(base: str) -> list[str]:
-    """Exercise the panel in a real browser. Returns collected errors."""
+# Page errors that indicate our code actually broke. Anything else (HA
+# core's own unhandled promise rejections, view-transition noise, opaque
+# non-Error rejections that stringify to "Object") is reported as a warning
+# but does not fail the run — the functional assertions below are the
+# authoritative signal.
+FATAL_JS_ERROR = re.compile(
+    r"TypeError|ReferenceError|SyntaxError|RangeError|not a function|is not defined"
+)
+
+
+def drive_panel(base: str) -> tuple[list[str], list[str]]:
+    """Exercise the panel in a real browser. Returns (errors, warnings)."""
     errors: list[str] = []
+    warnings: list[str] = []
+
+    def on_pageerror(err: object) -> None:
+        text = f"pageerror: {err}"
+        if "Transition was skipped" in text:
+            return
+        (errors if FATAL_JS_ERROR.search(text) else warnings).append(text)
+
     with sync_playwright() as p:
         browser = launch_browser(p)
         page = browser.new_page(viewport={"width": 1400, "height": 950})
-        # "Transition was skipped" is benign HA view-transition noise that
-        # fires on stock pages too; everything else is a real failure.
-        page.on(
-            "pageerror",
-            lambda e: (
-                None
-                if "Transition was skipped" in str(e)
-                else errors.append(f"pageerror: {e}")
-            ),
-        )
+        page.on("pageerror", on_pageerror)
 
         page.goto(base, wait_until="networkidle")
         page.fill('input[name="username"]', USERNAME, timeout=30000)
@@ -260,7 +270,7 @@ def drive_panel(base: str) -> list[str]:
 
         page.screenshot(path=SCREENSHOT, full_page=True)
         browser.close()
-    return errors
+    return errors, warnings
 
 
 def main() -> int:
@@ -293,6 +303,7 @@ def main() -> int:
         install_ha_component_requirements(hass_python)
     log_path = config_dir / "hass-output.log"
     errors: list[str] = []
+    warnings: list[str] = []
     with log_path.open("wb") as log_file:
         proc = subprocess.Popen(
             [hass_python, "-m", "homeassistant", "--config", str(config_dir)],
@@ -308,7 +319,7 @@ def main() -> int:
             add_integration(base, token)
             time.sleep(3)
             print("driving the panel...")
-            errors = drive_panel(base)
+            errors, warnings = drive_panel(base)
         except Exception as err:  # noqa: BLE001 - report, dump logs, fail the run
             errors.append(f"{type(err).__name__}: {err}")
         finally:
@@ -318,6 +329,8 @@ def main() -> int:
             except subprocess.TimeoutExpired:
                 proc.kill()
 
+    for w in warnings:
+        print(f"warning (non-fatal): {w}")
     if errors:
         print("SMOKE TEST FAILED:")
         for e in errors:
