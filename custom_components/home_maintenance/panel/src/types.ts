@@ -44,6 +44,8 @@ export interface EntityRegistryEntry {
 
 export type TriggerType = "time" | "count" | "runtime";
 
+export type NotifyWhen = "due" | "overdue" | "due_and_overdue";
+
 export interface Task {
     id: string;
     title: string;
@@ -62,6 +64,13 @@ export interface Task {
     area_id?: string | null;
     description?: string | null;
     group_id?: string | null;
+    notifications_enabled?: boolean;
+    notification_target?: string | null;
+    notification_time?: string | null;
+    notification_url?: string | null;
+    notify_when?: NotifyWhen;
+    notify_days_before_due?: number | null;
+    snooze_until?: string | null;
     // Computed by the backend (store.serialize) so the panel renders trigger
     // state without reimplementing trigger semantics.
     due?: boolean;
@@ -86,4 +95,10 @@ export interface TaskFormData {
     area: string;
     description: string;
     group_id: string;
+    notifications_enabled: boolean;
+    notification_target: string;
+    notification_time: string;
+    notification_url: string;
+    notify_when: NotifyWhen;
+    notify_days_before_due: number | "";
 }

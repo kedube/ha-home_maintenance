@@ -43,3 +43,38 @@ reset_count:
       selector:
         entity:
           domain: binary_sensor
+
+snooze_task:
+  name: Snooze Task
+  description: >
+    Silences a task's notifications for a number of days without completing it.
+  fields:
+    entity_id:
+      name: Entity ID
+      description: The ID of the task entity to snooze.
+      required: true
+      selector:
+        entity:
+          domain: binary_sensor
+    days:
+      name: Days
+      description: How many days to snooze notifications for (default 1).
+      required: false
+      default: 1
+      selector:
+        number:
+          min: 1
+          mode: box
+
+send_task_notification:
+  name: Send Task Notification
+  description: >
+    Immediately sends the task's notification using its configured notify service, regardless of due state or schedule.
+  fields:
+    entity_id:
+      name: Entity ID
+      description: The ID of the task entity to send a notification for.
+      required: true
+      selector:
+        entity:
+          domain: binary_sensor

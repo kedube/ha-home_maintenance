@@ -17,6 +17,12 @@ export const emptyTaskFormData = (): TaskFormData => ({
     area: "",
     description: "",
     group_id: "",
+    notifications_enabled: false,
+    notification_target: "",
+    notification_time: "09:00",
+    notification_url: "",
+    notify_when: "due_and_overdue",
+    notify_days_before_due: "",
 });
 
 export const taskToFormData = (
@@ -39,6 +45,12 @@ export const taskToFormData = (
     area: entity?.area_id ?? "",
     description: task.description ?? "",
     group_id: task.group_id ?? "",
+    notifications_enabled: task.notifications_enabled ?? false,
+    notification_target: task.notification_target ?? "",
+    notification_time: task.notification_time ?? "09:00",
+    notification_url: task.notification_url ?? "",
+    notify_when: task.notify_when ?? "due_and_overdue",
+    notify_days_before_due: task.notify_days_before_due ?? "",
 });
 
 const triggerTypeSelector = (lang: string) => ({
@@ -126,6 +138,55 @@ export const descriptionField = (multiline: boolean) => (
     { name: "description", selector: { text: multiline ? { multiline: true } : {} } }
 );
 
+/**
+ * Notification settings fields. Collapsed to just the enable toggle until
+ * notifications are turned on; the due-soon offset only applies to
+ * time-based tasks (count/runtime tasks have no due date to count down to).
+ */
+export const notificationFieldList = (
+    formData: TaskFormData,
+    notifyServices: string[],
+    lang: string,
+): any[] => {
+    const toggle = { name: "notifications_enabled", selector: { boolean: {} } };
+    if (!formData.notifications_enabled) return [toggle];
+
+    return [
+        toggle,
+        {
+            name: "notification_target",
+            selector: {
+                select: {
+                    options: [
+                        { value: "", label: localize("common.none", lang) },
+                        ...notifyServices.map((service) => ({ value: service, label: service })),
+                    ],
+                    mode: "dropdown",
+                    custom_value: true,
+                },
+            },
+        },
+        {
+            name: "notify_when",
+            selector: {
+                select: {
+                    options: [
+                        { value: "due", label: localize("notifications.when.due", lang) },
+                        { value: "overdue", label: localize("notifications.when.overdue", lang) },
+                        { value: "due_and_overdue", label: localize("notifications.when.due_and_overdue", lang) },
+                    ],
+                    mode: "dropdown",
+                },
+            },
+        },
+        ...(formData.trigger_type === "time"
+            ? [{ name: "notify_days_before_due", selector: { number: { min: 1, mode: "box" } } }]
+            : []),
+        { name: "notification_time", selector: { time: { no_second: true } } },
+        { name: "notification_url", selector: { text: {} } },
+    ];
+};
+
 /** Validate required fields per trigger type. Returns true when valid. */
 export const validateTaskForm = (data: TaskFormData): boolean => {
     if (!data.title?.trim()) return false;
@@ -155,6 +216,18 @@ export const computeISODate = (dateStr: string): string | null => {
     parsedDate.setHours(0, 0, 0, 0);
     return parsedDate.toISOString();
 };
+
+const notificationPayloadFields = (data: TaskFormData): Record<string, any> => ({
+    notifications_enabled: data.notifications_enabled ?? false,
+    notification_target: data.notification_target?.trim() || null,
+    notification_time: data.notification_time?.trim() || "09:00",
+    notification_url: data.notification_url?.trim() || null,
+    notify_when: data.notify_when || "due_and_overdue",
+    notify_days_before_due:
+        data.notify_days_before_due === "" || data.notify_days_before_due == null
+            ? null
+            : Number(data.notify_days_before_due),
+});
 
 const triggerPayloadFields = (data: TaskFormData): Record<string, any> => {
     const isCount = data.trigger_type === "count";
@@ -186,6 +259,7 @@ export const taskFormToAddPayload = (data: TaskFormData, lastPerformedISO: strin
         group_id: data.group_id?.trim() || undefined,
         ...(trigger.count_entity_id ? { count_entity_id: trigger.count_entity_id, count_threshold: trigger.count_threshold } : {}),
         ...(trigger.runtime_entity_id ? { runtime_entity_id: trigger.runtime_entity_id, runtime_threshold: trigger.runtime_threshold } : {}),
+        ...notificationPayloadFields(data),
     };
 };
 
@@ -199,4 +273,5 @@ export const taskFormToUpdates = (data: TaskFormData, lastPerformedISO: string):
     area_id: data.area?.trim() || null,
     description: data.description ?? "",
     group_id: data.group_id?.trim() || null,
+    ...notificationPayloadFields(data),
 });

@@ -5,6 +5,7 @@ import type { HomeAssistant } from "custom-card-helpers";
 import { localize } from '../../localize/localize';
 import { commonStyle } from '../styles';
 import { showToast } from '../toast';
+import { listNotifyServices } from '../util';
 import { saveTask } from '../data/websockets';
 import { renderTaskField, taskFieldStyles } from './task-fields';
 import {
@@ -12,6 +13,7 @@ import {
     computeISODate,
     descriptionField,
     emptyTaskFormData,
+    notificationFieldList,
     optionalFieldList,
     taskFormToAddPayload,
     validateTaskForm,
@@ -91,6 +93,13 @@ class HMTaskForm extends LitElement {
                     ${optionalFieldList(this.groups, this.hass.language).map(this._renderField)}
                     ${this._renderField(descriptionField(false))}
                 </div>
+
+                <div class="section-label">
+                    ${localize('panel.cards.new.sections.notifications', this.hass.language)}
+                </div>
+                <div class="fields-grid">
+                    ${notificationFieldList(this._formData, listNotifyServices(this.hass), this.hass.language).map(this._renderField)}
+                </div>
             </ha-expansion-panel>
         `;
     }
@@ -99,6 +108,12 @@ class HMTaskForm extends LitElement {
         .basic-row .fields-grid {
             flex: 1 1 500px;
             min-width: 0;
+        }
+
+        .section-label {
+            font-weight: 500;
+            color: var(--secondary-text-color);
+            margin: 20px 0 12px;
         }
     `];
 }

@@ -1,4 +1,5 @@
 import { html, TemplateResult } from "lit";
+import type { HomeAssistant } from "custom-card-helpers";
 
 import { localize } from '../localize/localize';
 import { Task } from './types';
@@ -35,6 +36,13 @@ export const formatTriggerInterval = (task: Task, lang: string): string => {
     }
     return formatTimeInterval(task.interval_value, task.interval_type, lang);
 };
+
+/** Sorted "notify.<service>" ids from the frontend's service registry. */
+export const listNotifyServices = (hass: HomeAssistant): string[] =>
+    Object.keys(hass.services?.notify ?? {})
+        .filter((service) => service !== "notify")
+        .map((service) => `notify.${service}`)
+        .sort((a, b) => a.localeCompare(b));
 
 /**
  * Newer HA slots dialog buttons through ha-dialog-footer; older HA expects

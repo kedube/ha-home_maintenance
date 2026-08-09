@@ -22,6 +22,13 @@
         "count": "Count-based",
         "runtime": "Runtime-based"
     },
+    "notifications": {
+        "when": {
+            "due": "Due",
+            "overdue": "Overdue",
+            "due_and_overdue": "Due and overdue"
+        }
+    },
     "card": {
         "add_task": {
             "added": "\"{title}\" added."
@@ -78,10 +85,33 @@
                     "group_id": {
                         "heading": "Group",
                         "helper": "Pick a group or type a new name"
+                    },
+                    "notifications_enabled": {
+                        "heading": "Enable notifications"
+                    },
+                    "notification_target": {
+                        "heading": "Notify service",
+                        "helper": "Leave empty to use notify.notify"
+                    },
+                    "notify_when": {
+                        "heading": "Notify when"
+                    },
+                    "notify_days_before_due": {
+                        "heading": "Days before due",
+                        "helper": "Optional due-soon reminder offset"
+                    },
+                    "notification_time": {
+                        "heading": "Time of day",
+                        "helper": "When automatic notifications are sent"
+                    },
+                    "notification_url": {
+                        "heading": "Open URL",
+                        "helper": "Optional URL for the notification's Open action"
                     }
                 },
                 "sections": {
-                    "optional": "Optional settings"
+                    "optional": "Optional settings",
+                    "notifications": "Notifications"
                 },
                 "actions": {
                     "add_task": "Add Task"
@@ -185,17 +215,42 @@
                     "group_id": {
                         "heading": "Group",
                         "helper": "Pick a group or type a new name"
+                    },
+                    "notifications_enabled": {
+                        "heading": "Enable notifications"
+                    },
+                    "notification_target": {
+                        "heading": "Notify service",
+                        "helper": "Leave empty to use notify.notify"
+                    },
+                    "notify_when": {
+                        "heading": "Notify when"
+                    },
+                    "notify_days_before_due": {
+                        "heading": "Days before due",
+                        "helper": "Optional due-soon reminder offset"
+                    },
+                    "notification_time": {
+                        "heading": "Time of day",
+                        "helper": "When automatic notifications are sent"
+                    },
+                    "notification_url": {
+                        "heading": "Open URL",
+                        "helper": "Optional URL for the notification's Open action"
                     }
                 },
                 "sections": {
-                    "optional": "Optional settings"
+                    "optional": "Optional settings",
+                    "notifications": "Notifications"
                 },
                 "actions": {
                     "cancel": "Cancel",
-                    "save": "Save"
+                    "save": "Save",
+                    "test_notification": "Send test notification"
                 },
                 "alerts": {
-                    "error": "Failed to save changes. See console for details."
+                    "error": "Failed to save changes. See console for details.",
+                    "test_error": "Failed to send the test notification. See console for details."
                 }
             },
             "move_task": {

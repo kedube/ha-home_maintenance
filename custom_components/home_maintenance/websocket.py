@@ -15,6 +15,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     DOMAIN,
+    NOTIFY_WHEN_OPTIONS,
     SIGNAL_TASKS_CHANGED,
     VERSION,
 )
@@ -47,6 +48,12 @@ UPDATES_SCHEMA = vol.Schema(
         vol.Optional("runtime_entity_id"): vol.Any(str, None),
         vol.Optional("runtime_threshold"): vol.Coerce(float),
         vol.Optional("group_id"): vol.Any(str, None),
+        vol.Optional("notifications_enabled"): bool,
+        vol.Optional("notification_target"): vol.Any(str, None),
+        vol.Optional("notification_time"): str,
+        vol.Optional("notification_url"): vol.Any(str, None),
+        vol.Optional("notify_when"): vol.In(NOTIFY_WHEN_OPTIONS),
+        vol.Optional("notify_days_before_due"): vol.Any(None, vol.Coerce(int)),
     }
 )
 
@@ -147,6 +154,12 @@ def websocket_add_task(
         area_id=msg.get("area_id"),
         description=msg.get("description"),
         group_id=msg.get("group_id"),
+        notifications_enabled=msg.get("notifications_enabled", False),
+        notification_target=msg.get("notification_target"),
+        notification_time=msg.get("notification_time", "09:00"),
+        notification_url=msg.get("notification_url"),
+        notify_when=msg.get("notify_when", "due_and_overdue"),
+        notify_days_before_due=msg.get("notify_days_before_due"),
     )
 
     new_id = store.add(new_task, msg.get("labels", []))
@@ -344,6 +357,12 @@ async def async_register_websockets(hass: HomeAssistant) -> None:
                 vol.Optional("area_id"): vol.Any(str, None),
                 vol.Optional("description"): vol.Any(str, None),
                 vol.Optional("group_id"): vol.Any(str, None),
+                vol.Optional("notifications_enabled"): bool,
+                vol.Optional("notification_target"): vol.Any(str, None),
+                vol.Optional("notification_time"): str,
+                vol.Optional("notification_url"): vol.Any(str, None),
+                vol.Optional("notify_when"): vol.In(NOTIFY_WHEN_OPTIONS),
+                vol.Optional("notify_days_before_due"): vol.Any(None, vol.Coerce(int)),
             }
         ),
     )

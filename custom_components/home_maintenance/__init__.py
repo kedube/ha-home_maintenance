@@ -6,7 +6,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from homeassistant.components.binary_sensor import DOMAIN as PLATFORM
+from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR_PLATFORM
+from homeassistant.components.calendar import DOMAIN as CALENDAR_PLATFORM
 from homeassistant.components.tag.const import EVENT_TAG_SCANNED
 from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
 from homeassistant.helpers import device_registry as dr
@@ -19,6 +20,7 @@ from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.util import dt as dt_util
 
 from . import const
+from .notifications import NotificationManager
 from .panel import (
     async_register_panel,
     async_unregister_panel,
@@ -38,12 +40,15 @@ _LOGGER = logging.getLogger(__name__)
 
 CONFIG_SCHEMA = const.CONFIG_SCHEMA
 
+PLATFORMS = [BINARY_SENSOR_PLATFORM, CALENDAR_PLATFORM]
+
 
 @dataclass
 class HomeMaintenanceData:
     """Runtime data for the Home Maintenance config entry."""
 
     store: TaskStore
+    notifications: NotificationManager | None = None
     unsub_watchers: list[CALLBACK_TYPE] = field(default_factory=list)
     watched_entities: frozenset[str] = frozenset()
 
@@ -81,7 +86,7 @@ async def async_setup_entry(
     # typed handle to the same runtime data.
     hass.data[const.DOMAIN] = data
 
-    await hass.config_entries.async_forward_entry_setups(entry, [PLATFORM])
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # Register the panel (frontend)
     await async_register_panel(hass, entry)
@@ -91,6 +96,11 @@ async def async_setup_entry(
 
     # Register custom services
     register_services(hass)
+
+    # Per-task notifications
+    data.notifications = NotificationManager(hass, task_store)
+    for unsub in data.notifications.async_setup():
+        entry.async_on_unload(unsub)
 
     @callback
     def handle_tag_scanned_event(event: Event) -> None:
@@ -138,7 +148,7 @@ async def async_unload_entry(
     hass: HomeAssistant, entry: HomeMaintenanceConfigEntry
 ) -> bool:
     """Unload Home Maintenance config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, [PLATFORM])
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if not unload_ok:
         return False
 
@@ -147,6 +157,8 @@ async def async_unload_entry(
         const.SERVICE_RESET,
         const.SERVICE_INCREMENT_COUNT,
         const.SERVICE_RESET_COUNT,
+        const.SERVICE_SNOOZE_TASK,
+        const.SERVICE_SEND_TASK_NOTIFICATION,
     ):
         hass.services.async_remove(const.DOMAIN, service)
     hass.data.pop(const.DOMAIN, None)
@@ -236,6 +248,36 @@ def register_services(hass: HomeAssistant) -> None:
         const.SERVICE_RESET_COUNT,
         async_srv_reset_count,
         schema=const.SERVICE_RESET_COUNT_SCHEMA,
+    )
+
+    async def async_srv_snooze_task(call: ServiceCall) -> None:
+        task_id = _task_id_for_entity(hass, call.data["entity_id"])
+        if task_id is None:
+            return
+        data: HomeMaintenanceData = hass.data[const.DOMAIN]
+        if data.notifications:
+            data.notifications.snooze_task(task_id, call.data["days"])
+
+    hass.services.async_register(
+        const.DOMAIN,
+        const.SERVICE_SNOOZE_TASK,
+        async_srv_snooze_task,
+        schema=const.SERVICE_SNOOZE_TASK_SCHEMA,
+    )
+
+    async def async_srv_send_task_notification(call: ServiceCall) -> None:
+        task_id = _task_id_for_entity(hass, call.data["entity_id"])
+        if task_id is None:
+            return
+        data: HomeMaintenanceData = hass.data[const.DOMAIN]
+        if data.notifications:
+            await data.notifications.async_send_notification(task_id, force=True)
+
+    hass.services.async_register(
+        const.DOMAIN,
+        const.SERVICE_SEND_TASK_NOTIFICATION,
+        async_srv_send_task_notification,
+        schema=const.SERVICE_SEND_TASK_NOTIFICATION_SCHEMA,
     )
 
 

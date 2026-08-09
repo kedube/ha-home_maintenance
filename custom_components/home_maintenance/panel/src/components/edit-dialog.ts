@@ -5,7 +5,7 @@ import type { HomeAssistant } from "custom-card-helpers";
 import { localize } from '../../localize/localize';
 import { commonStyle } from '../styles';
 import { showToast } from '../toast';
-import { dialogFooter } from '../util';
+import { dialogFooter, listNotifyServices } from '../util';
 import { loadTask, updateTask } from '../data/websockets';
 import { renderTaskField, taskFieldStyles } from './task-fields';
 import {
@@ -13,6 +13,7 @@ import {
     computeISODate,
     descriptionField,
     emptyTaskFormData,
+    notificationFieldList,
     optionalFieldList,
     taskFormToUpdates,
     taskToFormData,
@@ -79,6 +80,21 @@ class HMEditDialog extends LitElement {
         this._formData = emptyTaskFormData();
     }
 
+    /** Send the task's notification now (uses the last saved settings). */
+    private async _handleTestNotification() {
+        const entity = this.registry.find((entry) => entry.unique_id === this._taskId);
+        if (!entity) return;
+
+        try {
+            await this.hass!.callService("home_maintenance", "send_task_notification", {
+                entity_id: entity.entity_id,
+            });
+        } catch (e) {
+            console.error("Failed to send test notification:", e);
+            showToast(this, localize('panel.dialog.edit_task.alerts.test_error', this.hass!.language));
+        }
+    }
+
     private _handleFieldChanged = (name: string, ev: CustomEvent) => {
         ev.stopPropagation();
         this._formData = { ...this._formData, [name]: ev.detail.value };
@@ -115,6 +131,24 @@ class HMEditDialog extends LitElement {
                     ${this._renderField(descriptionField(true))}
                 </div>
 
+                <div class="section-label">
+                    ${localize('panel.dialog.edit_task.sections.notifications', lang)}
+                </div>
+
+                <div class="fields-grid">
+                    ${notificationFieldList(this._formData, listNotifyServices(this.hass), lang).map(this._renderField)}
+                </div>
+                ${this._formData.notifications_enabled ? html`
+                    <ha-button
+                        appearance="plain"
+                        size="small"
+                        class="test-notification"
+                        @click=${this._handleTestNotification}
+                    >
+                        ${localize('panel.dialog.edit_task.actions.test_notification', lang)}
+                    </ha-button>
+                ` : ""}
+
                 ${dialogFooter(html`
                     <ha-button
                         data-dialog="close"
@@ -137,6 +171,10 @@ class HMEditDialog extends LitElement {
             font-weight: 500;
             color: var(--secondary-text-color);
             margin: 20px 0 12px;
+        }
+
+        .test-notification {
+            margin-top: 12px;
         }
     `];
 }

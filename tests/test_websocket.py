@@ -372,6 +372,64 @@ async def test_rename_group_collision_rejected(
     assert response["error"]["code"] == "invalid_input"
 
 
+async def test_notification_fields_round_trip(
+    hass, setup_entry, hass_ws_client
+) -> None:
+    """Notification settings can be set on add, updated, and read back."""
+    client = await hass_ws_client(hass)
+    task_id = await add_task_via_ws(
+        client,
+        notifications_enabled=True,
+        notification_target="notify.mobile_app_phone",
+        notification_time="07:30",
+        notify_when="overdue",
+        notify_days_before_due=3,
+        notification_url="https://example.com/manual",
+    )
+
+    await client.send_json_auto_id(
+        {"type": "home_maintenance/get_task", "task_id": task_id}
+    )
+    task = (await client.receive_json())["result"]
+    assert task["notifications_enabled"] is True
+    assert task["notification_target"] == "notify.mobile_app_phone"
+    assert task["notification_time"] == "07:30"
+    assert task["notify_when"] == "overdue"
+    assert task["notify_days_before_due"] == 3
+    assert task["notification_url"] == "https://example.com/manual"
+
+    await client.send_json_auto_id(
+        {
+            "type": "home_maintenance/update_task",
+            "task_id": task_id,
+            "updates": {
+                "notifications_enabled": False,
+                "notification_target": None,
+                "notify_days_before_due": None,
+            },
+        }
+    )
+    assert (await client.receive_json())["success"]
+
+    await client.send_json_auto_id(
+        {"type": "home_maintenance/get_task", "task_id": task_id}
+    )
+    task = (await client.receive_json())["result"]
+    assert task["notifications_enabled"] is False
+    assert task["notification_target"] is None
+    assert task["notify_days_before_due"] is None
+
+    # Manager-owned bookkeeping is not writable through the API
+    await client.send_json_auto_id(
+        {
+            "type": "home_maintenance/update_task",
+            "task_id": task_id,
+            "updates": {"snooze_until": "2030-01-01T00:00:00"},
+        }
+    )
+    assert not (await client.receive_json())["success"]
+
+
 async def test_commands_after_unload_return_error(
     hass, setup_entry, hass_ws_client
 ) -> None:

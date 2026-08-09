@@ -22,6 +22,13 @@
         "count": "Zählerbasiert",
         "runtime": "Laufzeitbasiert"
     },
+    "notifications": {
+        "when": {
+            "due": "Fällig",
+            "overdue": "Überfällig",
+            "due_and_overdue": "Fällig und überfällig"
+        }
+    },
     "card": {
         "add_task": {
             "added": "\"{title}\" wurde hinzugefügt."
@@ -78,10 +85,33 @@
                     "group_id": {
                         "heading": "Gruppe",
                         "helper": "Gruppe wählen oder neuen Namen eingeben"
+                    },
+                    "notifications_enabled": {
+                        "heading": "Benachrichtigungen aktivieren"
+                    },
+                    "notification_target": {
+                        "heading": "Benachrichtigungsdienst",
+                        "helper": "Leer lassen, um notify.notify zu verwenden"
+                    },
+                    "notify_when": {
+                        "heading": "Benachrichtigen bei"
+                    },
+                    "notify_days_before_due": {
+                        "heading": "Tage vor Fälligkeit",
+                        "helper": "Optionale Vorab-Erinnerung"
+                    },
+                    "notification_time": {
+                        "heading": "Uhrzeit",
+                        "helper": "Wann automatische Benachrichtigungen gesendet werden"
+                    },
+                    "notification_url": {
+                        "heading": "URL öffnen",
+                        "helper": "Optionale URL für die Aktion „Öffnen“ der Benachrichtigung"
                     }
                 },
                 "sections": {
-                    "optional": "Optionale Einstellungen"
+                    "optional": "Optionale Einstellungen",
+                    "notifications": "Benachrichtigungen"
                 },
                 "actions": {
                     "add_task": "Aufgabe hinzufügen"
@@ -185,17 +215,42 @@
                     "group_id": {
                         "heading": "Gruppe",
                         "helper": "Gruppe wählen oder neuen Namen eingeben"
+                    },
+                    "notifications_enabled": {
+                        "heading": "Benachrichtigungen aktivieren"
+                    },
+                    "notification_target": {
+                        "heading": "Benachrichtigungsdienst",
+                        "helper": "Leer lassen, um notify.notify zu verwenden"
+                    },
+                    "notify_when": {
+                        "heading": "Benachrichtigen bei"
+                    },
+                    "notify_days_before_due": {
+                        "heading": "Tage vor Fälligkeit",
+                        "helper": "Optionale Vorab-Erinnerung"
+                    },
+                    "notification_time": {
+                        "heading": "Uhrzeit",
+                        "helper": "Wann automatische Benachrichtigungen gesendet werden"
+                    },
+                    "notification_url": {
+                        "heading": "URL öffnen",
+                        "helper": "Optionale URL für die Aktion „Öffnen“ der Benachrichtigung"
                     }
                 },
                 "sections": {
-                    "optional": "Optionale Einstellungen"
+                    "optional": "Optionale Einstellungen",
+                    "notifications": "Benachrichtigungen"
                 },
                 "actions": {
                     "cancel": "Abbrechen",
-                    "save": "Speichern"
+                    "save": "Speichern",
+                    "test_notification": "Testbenachrichtigung senden"
                 },
                 "alerts": {
-                    "error": "Änderungen konnten nicht gespeichert werden. Details in der Konsole."
+                    "error": "Änderungen konnten nicht gespeichert werden. Details in der Konsole.",
+                    "test_error": "Testbenachrichtigung konnte nicht gesendet werden. Details in der Konsole."
                 }
             },
             "move_task": {

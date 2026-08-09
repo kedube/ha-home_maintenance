@@ -117,6 +117,18 @@ Tasks can be organized into named groups — *Kitchen*, *HVAC*, *Outdoors* — a
 - The **Group** field in the add/edit forms assigns a task to a group — typing a new name there creates the group implicitly.
 - **Move to group** in a task's row menu quickly reassigns a single task.
 
+### Notifications
+
+Each task can send its own push notifications — enable them in the **Notifications** section of the add/edit forms:
+
+- **Notify service** — any `notify.*` service (for example `notify.mobile_app_your_phone`); leave empty to use `notify.notify`.
+- **Notify when** — send on *due*, *overdue*, or both. Count- and runtime-based tasks notify while due; time-based tasks distinguish the due day from overdue days.
+- **Days before due** — optional early reminder for time-based tasks (e.g. 3 days ahead).
+- **Time of day** — when the automatic notification is sent (default 09:00).
+- **Open URL** — optional link attached to the notification's **Open** action (e.g. the appliance manual).
+
+At most one notification per task and state is sent per day. Notifications sent to the Home Assistant mobile apps include **Mark complete** and **Snooze** action buttons — snoozing silences the task's notifications for a day (see [`home_maintenance.snooze_task`](#home_maintenancesnooze_task) for longer). The edit dialog has a **Send test notification** button that fires the task's notification immediately using its last saved settings.
+
 ### NFC tags
 
 Assign an NFC tag to a task and scanning that tag marks the task complete. Assign the same tag to several tasks to complete them all with one scan — handy for a "furnace room" tag that resets every filter task at once.
@@ -157,6 +169,10 @@ Each task is a `binary_sensor` (grouped under one *Home Maintenance* device) tha
 | `current_count`, `count_threshold`, `count_entity_id` | | ✓ | |
 | `runtime_entity_id`, `runtime_threshold`, `runtime_baseline`, `runtime_current`, `runtime_delta` | | | ✓ |
 
+### Calendar
+
+A single `calendar.home_maintenance` entity shows one **all-day event per time-based task** on its next due date, so upcoming maintenance appears in the Calendar dashboard, calendar cards, and [calendar-trigger automations](https://www.home-assistant.io/docs/automation/trigger/#calendar-trigger), and can be queried with `calendar.get_events`. Count- and runtime-based tasks have no due date and are not shown. Only each task's next occurrence is listed (future dates shift whenever a task is completed); overdue tasks stay on their original due date.
+
 ## Services
 
 ### `home_maintenance.reset_last_performed`
@@ -190,9 +206,30 @@ data:
   entity_id: binary_sensor.descale_coffee_machine
 ```
 
+### `home_maintenance.snooze_task`
+
+Silences a task's [notifications](#notifications) for a number of days (default 1) without completing it.
+
+```yaml
+action: home_maintenance.snooze_task
+data:
+  entity_id: binary_sensor.change_hvac_filter
+  days: 3  # optional; defaults to 1
+```
+
+### `home_maintenance.send_task_notification`
+
+Sends the task's notification immediately using its configured notify service, regardless of due state, snooze, or schedule — useful for testing and custom automations.
+
+```yaml
+action: home_maintenance.send_task_notification
+data:
+  entity_id: binary_sensor.change_hvac_filter
+```
+
 ## Automation ideas
 
-**Get notified when a task becomes due.** Every task is a binary sensor, so a state trigger is all it takes:
+**Get notified when a task becomes due.** Built-in per-task [notifications](#notifications) cover the common case. For full control — custom copy, conditions, or other actions — every task is a binary sensor, so a state trigger is all it takes:
 
 ```yaml
 automation:

@@ -55,6 +55,30 @@ SERVICE_RESET_COUNT_SCHEMA = vol.Schema(
     }
 )
 
+# Per-task notifications. notify_when picks which due states notify;
+# the mobile action ids round-trip through mobile_app notification events.
+NOTIFY_WHEN_OPTIONS = ["due", "overdue", "due_and_overdue"]
+NOTIFICATION_ACTION_COMPLETE = "HOME_MAINTENANCE_COMPLETE"
+NOTIFICATION_ACTION_SNOOZE = "HOME_MAINTENANCE_SNOOZE"
+DEFAULT_SNOOZE_DAYS = 1
+
+SERVICE_SNOOZE_TASK = "snooze_task"
+SERVICE_SNOOZE_TASK_SCHEMA = vol.Schema(
+    {
+        vol.Required("entity_id"): cv.entity_id,
+        vol.Optional("days", default=DEFAULT_SNOOZE_DAYS): vol.All(
+            vol.Coerce(int), vol.Range(min=1)
+        ),
+    }
+)
+
+SERVICE_SEND_TASK_NOTIFICATION = "send_task_notification"
+SERVICE_SEND_TASK_NOTIFICATION_SCHEMA = vol.Schema(
+    {
+        vol.Required("entity_id"): cv.entity_id,
+    }
+)
+
 CONFIG_STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Optional("admin_only", default=True): cv.boolean,

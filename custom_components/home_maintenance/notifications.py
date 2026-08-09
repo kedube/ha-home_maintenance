@@ -1,0 +1,269 @@
+"""
+Per-task notifications for Home Maintenance.
+
+Each task can opt into notifications through a notify service of its choice.
+The manager re-evaluates every minute (to honor each task's send time) and on
+every task change, sends at most one notification per task, kind, and day,
+and handles the actionable buttons (complete / snooze) coming back from the
+Home Assistant mobile apps.
+"""
+
+from __future__ import annotations
+
+import logging
+from datetime import timedelta
+from typing import TYPE_CHECKING, Any
+
+from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.event import async_track_time_change
+from homeassistant.util import dt as dt_util
+
+from . import const
+from .triggers import get_trigger
+
+if TYPE_CHECKING:
+    from datetime import datetime
+
+    from homeassistant.core import CALLBACK_TYPE
+
+    from .store import HomeMaintenanceTask, TaskStore
+
+_LOGGER = logging.getLogger(__name__)
+
+MOBILE_APP_ACTION_EVENT = "mobile_app_notification_action"
+
+
+def parse_notification_time(value: str | None) -> tuple[int, int]:
+    """Parse an HH:MM[:SS] time selector value, defaulting to 09:00."""
+    if value:
+        parts = value.split(":")
+        if len(parts) >= 2:  # noqa: PLR2004
+            try:
+                return (int(parts[0]), int(parts[1]))
+            except ValueError:
+                pass
+    return (9, 0)
+
+
+def resolve_notify_service(value: str | None) -> tuple[str, str]:
+    """Resolve "notify.mobile_app_x" / "mobile_app_x" into (domain, service)."""
+    if not value:
+        return ("notify", "notify")
+    if "." in value:
+        domain, service = value.split(".", 1)
+        return (domain, service)
+    return ("notify", value)
+
+
+class NotificationManager:
+    """Send per-task notifications and handle mobile notification actions."""
+
+    def __init__(self, hass: HomeAssistant, store: TaskStore) -> None:
+        """Initialize the notification manager."""
+        self.hass = hass
+        self._store = store
+
+    @callback
+    def async_setup(self) -> list[CALLBACK_TYPE]:
+        """Subscribe to task changes, the minute tick, and mobile actions."""
+        unsubs = [
+            async_dispatcher_connect(
+                self.hass, const.SIGNAL_TASKS_CHANGED, self._schedule_processing
+            ),
+            async_track_time_change(
+                self.hass, self._schedule_processing, minute="*", second=0
+            ),
+            self.hass.bus.async_listen(
+                MOBILE_APP_ACTION_EVENT, self._handle_mobile_action
+            ),
+        ]
+        self._schedule_processing()
+        return unsubs
+
+    @callback
+    def _schedule_processing(self, *_args: Any) -> None:
+        """Queue notification processing from sync callback contexts."""
+        self.hass.async_create_task(self.async_process_notifications())
+
+    async def async_process_notifications(self) -> None:
+        """Send any notifications that are currently due."""
+        for task_id in list(self._store.tasks):
+            await self.async_send_notification(task_id)
+
+    async def async_send_notification(
+        self, task_id: str, *, force: bool = False
+    ) -> bool:
+        """
+        Send a task's notification if one is currently warranted.
+
+        With force=True (the send_task_notification service) the enabled,
+        snooze, send-time, and once-per-day checks are skipped.
+        """
+        task = self._store.tasks.get(task_id)
+        if task is None:
+            return False
+
+        kind, days_until_due = self._notification_kind(task)
+        now = dt_util.now()
+        today = now.date().isoformat()
+
+        if force:
+            kind = kind or "manual"
+        elif not self._should_send_now(task, kind, now, today):
+            return False
+
+        domain, service = resolve_notify_service(task.notification_target)
+        try:
+            await self.hass.services.async_call(
+                domain,
+                service,
+                {
+                    "title": task.title,
+                    "message": self._build_message(task, kind, days_until_due),
+                    "data": self._build_payload(task),
+                },
+                blocking=True,
+            )
+        except HomeAssistantError:
+            _LOGGER.exception(
+                "Failed to send notification for task %s via %s.%s",
+                task_id,
+                domain,
+                service,
+            )
+            return False
+
+        self._store.update_notification_state(
+            task_id,
+            last_notification_kind=kind,
+            last_notification_date=today,
+        )
+        return True
+
+    def _should_send_now(
+        self, task: HomeMaintenanceTask, kind: str | None, now: datetime, today: str
+    ) -> bool:
+        """Apply the enabled, snooze, send-time, and once-per-day gates."""
+        if not task.notifications_enabled or kind is None:
+            return False
+        if self._is_snoozed(task):
+            return False
+        if (now.hour, now.minute) < parse_notification_time(task.notification_time):
+            return False
+        return not (
+            task.last_notification_date == today and task.last_notification_kind == kind
+        )
+
+    @callback
+    def snooze_task(self, task_id: str, days: int) -> None:
+        """Silence a task's notifications for the given number of days."""
+        snooze_until = (dt_util.start_of_local_day() + timedelta(days=days)).isoformat()
+        self._store.update_notification_state(
+            task_id,
+            snooze_until=snooze_until,
+            last_notification_kind=None,
+            last_notification_date=None,
+        )
+
+    async def _handle_mobile_action(self, event: Event) -> None:
+        """Handle complete/snooze actions from mobile app notifications."""
+        action = event.data.get("action")
+        if not isinstance(action, str):
+            return
+
+        complete_prefix = f"{const.NOTIFICATION_ACTION_COMPLETE}::"
+        snooze_prefix = f"{const.NOTIFICATION_ACTION_SNOOZE}::"
+
+        if action.startswith(complete_prefix):
+            task_id = action.removeprefix(complete_prefix)
+            if task_id in self._store.tasks:
+                self._store.update_last_performed(task_id)
+        elif action.startswith(snooze_prefix):
+            task_id = action.removeprefix(snooze_prefix)
+            if task_id in self._store.tasks:
+                self.snooze_task(task_id, const.DEFAULT_SNOOZE_DAYS)
+
+    def _notification_kind(
+        self, task: HomeMaintenanceTask
+    ) -> tuple[str | None, int | None]:
+        """
+        Return (kind, days_until_due) for the notification a task warrants.
+
+        Time-based tasks distinguish due_soon / due / overdue by calendar
+        date; count- and runtime-based tasks have no date, so being due maps
+        to "due" (repeated daily until completed, like an overdue reminder).
+        """
+        trigger = get_trigger(task.trigger_type)
+        next_due = trigger.next_due(self.hass, task)
+
+        if next_due is None:
+            if trigger.is_due(self.hass, task) and task.notify_when in (
+                "due",
+                "due_and_overdue",
+            ):
+                return ("due", None)
+            return (None, None)
+
+        days_until_due = (next_due.date() - dt_util.now().date()).days
+        if (
+            task.notify_days_before_due is not None
+            and days_until_due == task.notify_days_before_due
+            and days_until_due > 0
+        ):
+            return ("due_soon", days_until_due)
+        if days_until_due == 0 and task.notify_when in ("due", "due_and_overdue"):
+            return ("due", days_until_due)
+        if days_until_due < 0 and task.notify_when in ("overdue", "due_and_overdue"):
+            return ("overdue", days_until_due)
+        return (None, days_until_due)
+
+    def _is_snoozed(self, task: HomeMaintenanceTask) -> bool:
+        """Whether the task's snooze window covers today."""
+        if not task.snooze_until:
+            return False
+        snooze_until = dt_util.parse_datetime(task.snooze_until)
+        if snooze_until is None:
+            return False
+        if snooze_until.tzinfo is None:
+            snooze_until = snooze_until.replace(tzinfo=dt_util.get_default_time_zone())
+        return dt_util.start_of_local_day() < snooze_until
+
+    @staticmethod
+    def _build_message(
+        task: HomeMaintenanceTask, kind: str | None, days_until_due: int | None
+    ) -> str:
+        """Build the notification body for a task and notification kind."""
+        if kind == "due_soon":
+            return f"{task.title} is due in {days_until_due} day(s)."
+        if kind == "overdue":
+            return f"{task.title} is overdue."
+        if kind == "manual":
+            return f"{task.title} notification sent."
+        return f"{task.title} is due."
+
+    @staticmethod
+    def _build_payload(task: HomeMaintenanceTask) -> dict[str, Any]:
+        """Build the mobile notification action payload."""
+        actions: list[dict[str, str]] = [
+            {
+                "action": f"{const.NOTIFICATION_ACTION_COMPLETE}::{task.id}",
+                "title": "Mark complete",
+            },
+            {
+                "action": f"{const.NOTIFICATION_ACTION_SNOOZE}::{task.id}",
+                "title": "Snooze",
+            },
+        ]
+        if task.notification_url:
+            actions.append(
+                {"action": "URI", "title": "Open", "uri": task.notification_url}
+            )
+
+        return {
+            # One tag per task so a newer notification replaces the older one.
+            "tag": f"{const.DOMAIN}_{task.id}",
+            "actions": actions,
+            "url": task.notification_url,
+        }

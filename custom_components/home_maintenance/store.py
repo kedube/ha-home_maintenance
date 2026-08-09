@@ -16,13 +16,14 @@ _LOGGER = logging.getLogger(__name__)
 
 STORAGE_KEY = f"{const.DOMAIN}.storage"
 STORAGE_VERSION_MAJOR = 1
-STORAGE_VERSION_MINOR = 3
+STORAGE_VERSION_MINOR = 4
 SAVE_DELAY = 1.0
 
 # Fields a websocket update may modify. Everything else — id, current_count,
-# runtime_baseline — is managed by the integration itself. "labels" is
-# intentionally absent: labels live in the entity registry, not on the task,
-# so update_task applies them to the registry entry instead.
+# runtime_baseline, notification bookkeeping — is managed by the integration
+# itself. "labels" is intentionally absent: labels live in the entity
+# registry, not on the task, so update_task applies them to the registry
+# entry instead.
 ALLOWED_UPDATE_FIELDS = {
     "title",
     "trigger_type",
@@ -38,6 +39,20 @@ ALLOWED_UPDATE_FIELDS = {
     "runtime_entity_id",
     "runtime_threshold",
     "group_id",
+    "notifications_enabled",
+    "notification_target",
+    "notification_time",
+    "notification_url",
+    "notify_when",
+    "notify_days_before_due",
+}
+
+# Fields owned by the notification manager, written via
+# update_notification_state rather than update_task.
+NOTIFICATION_STATE_FIELDS = {
+    "snooze_until",
+    "last_notification_kind",
+    "last_notification_date",
 }
 
 
@@ -62,6 +77,15 @@ class HomeMaintenanceTask:
     area_id: str | None = attr.ib(default=None)
     description: str | None = attr.ib(default=None)
     group_id: str | None = attr.ib(default=None)
+    notifications_enabled: bool = attr.ib(default=False)
+    notification_target: str | None = attr.ib(default=None)
+    notification_time: str = attr.ib(default="09:00")
+    notification_url: str | None = attr.ib(default=None)
+    notify_when: str = attr.ib(default="due_and_overdue")
+    notify_days_before_due: int | None = attr.ib(default=None)
+    snooze_until: str | None = attr.ib(default=None)
+    last_notification_kind: str | None = attr.ib(default=None)
+    last_notification_date: str | None = attr.ib(default=None)
 
 
 def normalize_group_id(group_id: str | None) -> str | None:
@@ -393,6 +417,23 @@ class TaskStore:
         task.current_count = 0
         self._save()
         self._notify_updated(task_id)
+
+    def update_notification_state(self, task_id: str, **updates: str | None) -> None:
+        """
+        Update the notification manager's bookkeeping fields on a task.
+
+        Deliberately does not fire dispatcher signals: snooze/last-sent state
+        is not entity or panel state, and announcing it would re-trigger the
+        notification manager that just wrote it.
+        """
+        task = self._tasks.get(task_id)
+        if task is None:
+            return
+
+        for key, value in updates.items():
+            if key in NOTIFICATION_STATE_FIELDS:
+                setattr(task, key, value)
+        self._save()
 
     def update_runtime_baseline(self, task_id: str, new_baseline: float) -> None:
         """Update the runtime baseline for a runtime-based task."""
