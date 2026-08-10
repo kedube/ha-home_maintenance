@@ -20,6 +20,7 @@ from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.util import dt as dt_util
 
 from . import const
+from .config_flow import HomeMaintenanceConfigFlow
 from .notifications import NotificationManager
 from .panel import (
     async_register_panel,
@@ -191,10 +192,21 @@ async def async_remove_entry(
 
 
 async def async_migrate_entry(
-    hass: HomeAssistant,  # noqa: ARG001
-    entry: HomeMaintenanceConfigEntry,  # noqa: ARG001
+    hass: HomeAssistant,
+    entry: HomeMaintenanceConfigEntry,
 ) -> bool:
-    """Handle migration of config entry."""
+    """
+    Handle migration of config entry.
+
+    Entries created before the config-flow VERSION became an int carry a
+    string version ("1.1.0"). HA's migrate step compares versions with ==
+    (so no crash) and dispatches here; normalize the stored version to the
+    current int so the entry stops re-migrating on every startup.
+    """
+    if not isinstance(entry.version, int):
+        hass.config_entries.async_update_entry(
+            entry, version=HomeMaintenanceConfigFlow.VERSION
+        )
     return True
 
 

@@ -4,6 +4,14 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
+## Unreleased
+
+- Fixed (regression in 1.5.20): existing installs could get stuck on
+  "Initializing" after upgrading, because the config-entry version changed
+  from a string ("1.1.0") to an int (1). Setup now migrates the legacy string
+  version to the int in place, so upgraded entries load without needing to be
+  deleted and re-added.
+
 ## 1.5.20 — 2026-08-10
 
 - Security: mutating websocket commands now require an admin user, matching
