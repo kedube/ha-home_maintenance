@@ -122,9 +122,11 @@ async def test_count_watcher_increments_on_transition(hass, setup_entry) -> None
     assert task.current_count == 2
 
 
-async def test_runtime_watcher_detects_external_reset(hass, setup_entry) -> None:
+async def test_runtime_watcher_tolerates_transient_dip(hass, setup_entry) -> None:
+    """A below-baseline reading is tolerated transiently, not persisted as 0."""
     data: HomeMaintenanceData = hass.data[DOMAIN]
     from custom_components.home_maintenance.store import HomeMaintenanceTask
+    from custom_components.home_maintenance.triggers import get_trigger
 
     hass.states.async_set("sensor.pump_hours", "100")
 
@@ -142,10 +144,56 @@ async def test_runtime_watcher_detects_external_reset(hass, setup_entry) -> None
     await hass.async_block_till_done()
     assert task.runtime_baseline == 100
 
-    # Sensor reset externally: baseline is persisted back to 0
+    # A momentary dip below the baseline must NOT permanently rewrite the
+    # stored baseline to 0 (which would turn the sensor's lifetime total into
+    # accumulated runtime once it recovers). delta() tolerates a below-
+    # baseline reading transiently by treating the baseline as 0 for that
+    # reading only, without persisting it.
+    trigger = get_trigger("runtime")
     hass.states.async_set("sensor.pump_hours", "3")
     await hass.async_block_till_done()
-    assert task.runtime_baseline == 0
+    assert task.runtime_baseline == 100
+
+    # When the sensor recovers to a normal reading, progress resumes from the
+    # original stored baseline (140 - 100 = 40), NOT from 0 (which would give
+    # 140 and instantly exceed the 50 threshold).
+    hass.states.async_set("sensor.pump_hours", "140")
+    await hass.async_block_till_done()
+    assert task.runtime_baseline == 100
+    assert trigger.delta(hass, task) == 40
+    assert trigger.is_due(hass, task) is False
+
+
+async def test_runtime_baseline_pending_when_sensor_unavailable(
+    hass, setup_entry
+) -> None:
+    """Baseline is captured from the first real reading, not anchored at 0."""
+    data: HomeMaintenanceData = hass.data[DOMAIN]
+    from custom_components.home_maintenance.store import HomeMaintenanceTask
+    from custom_components.home_maintenance.triggers import get_trigger
+
+    hass.states.async_set("sensor.gen_hours", "unavailable")
+
+    task = HomeMaintenanceTask(
+        id="home_maintenance_rt2",
+        title="Service Generator",
+        interval_value=1,
+        interval_type="days",
+        last_performed="2026-01-01T00:00:00",
+        trigger_type="runtime",
+        runtime_entity_id="sensor.gen_hours",
+        runtime_threshold=50,
+    )
+    data.store.add(task)
+    await hass.async_block_till_done()
+    # Pending, not 0 — so it does not read as instantly due later.
+    assert task.runtime_baseline is None
+
+    trigger = get_trigger("runtime")
+    hass.states.async_set("sensor.gen_hours", "1500")
+    await hass.async_block_till_done()
+    assert task.runtime_baseline == 1500
+    assert trigger.is_due(hass, task) is False
 
 
 async def test_services(hass, setup_entry) -> None:
@@ -285,3 +333,114 @@ async def test_unload_removes_services_and_data(hass, setup_entry) -> None:
     assert not hass.services.has_service(DOMAIN, SERVICE_INCREMENT_COUNT)
     assert not hass.services.has_service(DOMAIN, SERVICE_RESET_COUNT)
     assert DOMAIN not in hass.data
+
+
+async def test_unload_flushes_pending_save(hass, hass_storage, setup_entry) -> None:
+    """A mutation within the delayed-save window is persisted on unload."""
+    from custom_components.home_maintenance.store import HomeMaintenanceTask
+
+    data: HomeMaintenanceData = hass.data[DOMAIN]
+    data.store.add(
+        HomeMaintenanceTask(
+            id="home_maintenance_flush",
+            title="Flush Test",
+            interval_value=30,
+            interval_type="days",
+            last_performed="2026-01-01T00:00:00",
+        )
+    )
+    # Unload before the 1s delayed save would fire.
+    assert await hass.config_entries.async_unload(setup_entry.entry_id)
+    await hass.async_block_till_done()
+
+    stored = hass_storage[STORAGE_KEY]["data"]["tasks"]
+    assert any(t["id"] == "home_maintenance_flush" for t in stored)
+
+
+async def test_tag_scan_without_tag_id_completes_nothing(hass, setup_entry) -> None:
+    """A tag_scanned event with no tag_id must not complete orphaned tasks."""
+    from homeassistant.components.tag.const import EVENT_TAG_SCANNED
+
+    from custom_components.home_maintenance.store import HomeMaintenanceTask
+
+    data: HomeMaintenanceData = hass.data[DOMAIN]
+    data.store.add(
+        HomeMaintenanceTask(
+            id="home_maintenance_orphan",
+            title="Orphan Tag Task",
+            interval_value=30,
+            interval_type="days",
+            last_performed="2020-01-01T00:00:00",
+            tag_id="tag.deleted",  # not present in the entity registry
+        )
+    )
+    await hass.async_block_till_done()
+    before = data.store.tasks["home_maintenance_orphan"].last_performed
+
+    hass.bus.async_fire(EVENT_TAG_SCANNED, {})  # no tag_id
+    await hass.async_block_till_done()
+
+    assert data.store.tasks["home_maintenance_orphan"].last_performed == before
+
+
+async def test_count_watcher_ignores_unavailable_to_on(hass, setup_entry) -> None:
+    """A reconnect (unavailable -> on) must not count as an activation."""
+    from custom_components.home_maintenance.store import HomeMaintenanceTask
+
+    data: HomeMaintenanceData = hass.data[DOMAIN]
+    data.store.add(
+        HomeMaintenanceTask(
+            id="home_maintenance_cnt",
+            title="Count Task",
+            interval_value=1,
+            interval_type="days",
+            last_performed="2026-01-01T00:00:00",
+            trigger_type="count",
+            count_entity_id="switch.appliance",
+            count_threshold=5,
+        )
+    )
+    await hass.async_block_till_done()
+
+    hass.states.async_set("switch.appliance", "unavailable")
+    await hass.async_block_till_done()
+    hass.states.async_set("switch.appliance", "on")
+    await hass.async_block_till_done()
+    assert data.store.tasks["home_maintenance_cnt"].current_count == 0
+
+    # A genuine off -> on still counts.
+    hass.states.async_set("switch.appliance", "off")
+    await hass.async_block_till_done()
+    hass.states.async_set("switch.appliance", "on")
+    await hass.async_block_till_done()
+    assert data.store.tasks["home_maintenance_cnt"].current_count == 1
+
+
+async def test_watchers_rebuild_for_shared_entity(hass, setup_entry) -> None:
+    """A second task counting an already-watched entity still increments."""
+    from custom_components.home_maintenance.store import HomeMaintenanceTask
+
+    data: HomeMaintenanceData = hass.data[DOMAIN]
+    for suffix in ("a", "b"):
+        data.store.add(
+            HomeMaintenanceTask(
+                id=f"home_maintenance_{suffix}",
+                title=f"Task {suffix}",
+                interval_value=1,
+                interval_type="days",
+                last_performed="2026-01-01T00:00:00",
+                trigger_type="count",
+                count_entity_id="switch.shared",
+                count_threshold=5,
+            )
+        )
+        await hass.async_block_till_done()
+
+    hass.states.async_set("switch.shared", "off")
+    await hass.async_block_till_done()
+    hass.states.async_set("switch.shared", "on")
+    await hass.async_block_till_done()
+
+    # Both tasks, including the one added after the entity was first watched.
+    assert data.store.tasks["home_maintenance_a"].current_count == 1
+    assert data.store.tasks["home_maintenance_b"].current_count == 1

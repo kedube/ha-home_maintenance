@@ -10,6 +10,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.util import dt as dt_util
 
 from . import const
+from .task_fields import ALLOWED_UPDATE_FIELDS
 from .triggers import get_trigger
 
 _LOGGER = logging.getLogger(__name__)
@@ -19,33 +20,12 @@ STORAGE_VERSION_MAJOR = 1
 STORAGE_VERSION_MINOR = 4
 SAVE_DELAY = 1.0
 
-# Fields a websocket update may modify. Everything else — id, current_count,
-# runtime_baseline, notification bookkeeping — is managed by the integration
-# itself. "labels" is intentionally absent: labels live in the entity
-# registry, not on the task, so update_task applies them to the registry
-# entry instead.
-ALLOWED_UPDATE_FIELDS = {
-    "title",
-    "trigger_type",
-    "interval_value",
-    "interval_type",
-    "last_performed",
-    "icon",
-    "tag_id",
-    "area_id",
-    "description",
-    "count_entity_id",
-    "count_threshold",
-    "runtime_entity_id",
-    "runtime_threshold",
-    "group_id",
-    "notifications_enabled",
-    "notification_target",
-    "notification_time",
-    "notification_url",
-    "notify_when",
-    "notify_days_before_due",
-}
+# ALLOWED_UPDATE_FIELDS (the fields a websocket update may modify) is derived
+# from the single task-field map in task_fields.py. "labels" is intentionally
+# absent: labels live in the entity registry, not on the task, so update_task
+# applies them to the registry entry instead. id/current_count/
+# runtime_baseline and the notification bookkeeping below are never client-
+# writable.
 
 # Fields owned by the notification manager, written via
 # update_notification_state rather than update_task.
@@ -73,7 +53,10 @@ class HomeMaintenanceTask:
     current_count: int = attr.ib(default=0)
     runtime_entity_id: str | None = attr.ib(default=None)
     runtime_threshold: float = attr.ib(default=0)
-    runtime_baseline: float = attr.ib(default=0)
+    # None means "capture the baseline from the sensor's first available
+    # reading" — used when the sensor is unavailable at create/complete time
+    # so a task never baselines at 0 and instantly reports due.
+    runtime_baseline: float | None = attr.ib(default=0)
     area_id: str | None = attr.ib(default=None)
     description: str | None = attr.ib(default=None)
     group_id: str | None = attr.ib(default=None)
@@ -153,14 +136,25 @@ class TaskStore:
 
         # Fields added after a task was stored fall back to the attrs
         # defaults; unknown stored fields (e.g. written by a newer version)
-        # are dropped instead of aborting setup with a TypeError.
+        # are dropped instead of aborting setup with a TypeError. A record
+        # that is not a dict or lacks an id is skipped (not fatal) so one
+        # corrupt entry can't take the whole integration down at setup.
         known_fields = {field.name for field in attr.fields(HomeMaintenanceTask)}
-        self._tasks = {
-            task_data["id"]: HomeMaintenanceTask(
-                **{k: v for k, v in task_data.items() if k in known_fields}
-            )
-            for task_data in task_items
-        }
+        self._tasks = {}
+        for task_data in task_items:
+            if not isinstance(task_data, dict) or not task_data.get("id"):
+                _LOGGER.warning("Skipping malformed stored task record: %s", task_data)
+                continue
+            try:
+                task = HomeMaintenanceTask(
+                    **{k: v for k, v in task_data.items() if k in known_fields}
+                )
+            except (TypeError, ValueError):
+                _LOGGER.warning(
+                    "Skipping unloadable stored task %s", task_data.get("id")
+                )
+                continue
+            self._tasks[task.id] = task
         # Groups in use by tasks always exist, even if the stored list lags.
         self._groups = {
             group
@@ -350,6 +344,7 @@ class TaskStore:
             raise RuntimeError(error)
 
         previous_trigger = task.trigger_type
+        previous_watched = get_trigger(previous_trigger).watched_entity(task)
 
         for key, value in updated.items():
             if key not in ALLOWED_UPDATE_FIELDS:
@@ -360,10 +355,16 @@ class TaskStore:
 
         self._register_task_group(task)
 
-        # Switching trigger type re-initializes trigger-managed state
-        # (counter reset, runtime baseline capture).
-        if task.trigger_type != previous_trigger:
-            get_trigger(task.trigger_type).initialize(self.hass, task)
+        # Re-initialize trigger-managed state (counter reset, runtime baseline
+        # capture) when the trigger type OR the watched entity changes —
+        # otherwise a counter/baseline captured from the old entity carries
+        # over and the task reads as due immediately.
+        new_trigger = get_trigger(task.trigger_type)
+        if (
+            task.trigger_type != previous_trigger
+            or new_trigger.watched_entity(task) != previous_watched
+        ):
+            new_trigger.initialize(self.hass, task)
 
         entity_id = self._entity_id_for(task_id)
         if entity_id:
@@ -376,10 +377,10 @@ class TaskStore:
         self._save()
         self._notify_updated(task_id)
 
-    def update_last_performed(
-        self, task_id: str, performed_date: datetime | None = None
-    ) -> None:
-        """Mark a task complete: update last_performed, apply trigger effects."""
+    def _apply_completion(
+        self, task_id: str, performed_date: datetime | None
+    ) -> HomeMaintenanceTask:
+        """Mutate one task's completion state without saving or announcing."""
         task = self._tasks.get(task_id)
         if task is None:
             msg = "Task not found."
@@ -389,9 +390,36 @@ class TaskStore:
             dt_util.as_local(performed_date) if performed_date is not None else None
         ).isoformat()
         get_trigger(task.trigger_type).on_complete(self.hass, task)
+        return task
 
+    def update_last_performed(
+        self, task_id: str, performed_date: datetime | None = None
+    ) -> None:
+        """Mark a task complete: update last_performed, apply trigger effects."""
+        self._apply_completion(task_id, performed_date)
         self._save()
         self._notify_updated(task_id)
+
+    def complete_tasks(self, task_ids: list[str]) -> None:
+        """
+        Mark several tasks complete with a single save and change signal.
+
+        Used for a tag scan shared by multiple tasks, so one scan doesn't
+        fan out into k saves, k notification passes, and k panel refetches.
+        Unknown ids are skipped.
+        """
+        completed = [
+            self._apply_completion(task_id, None)
+            for task_id in task_ids
+            if task_id in self._tasks
+        ]
+        if not completed:
+            return
+
+        self._save()
+        for task in completed:
+            async_dispatcher_send(self.hass, const.signal_task_updated(task.id))
+        async_dispatcher_send(self.hass, const.SIGNAL_TASKS_CHANGED)
 
     def increment_count(self, task_id: str) -> None:
         """Increment the count for a count-based task."""
@@ -446,7 +474,7 @@ class TaskStore:
         self._notify_updated(task_id)
 
     def _notify_updated(self, task_id: str) -> None:
-        async_dispatcher_send(self.hass, const.SIGNAL_TASK_UPDATED, task_id)
+        async_dispatcher_send(self.hass, const.signal_task_updated(task_id))
         async_dispatcher_send(self.hass, const.SIGNAL_TASKS_CHANGED)
 
     def _save(self) -> None:
@@ -457,4 +485,21 @@ class TaskStore:
                 "groups": sorted(self._groups),
             },
             SAVE_DELAY,
+        )
+
+    async def async_flush(self) -> None:
+        """
+        Write any pending delayed save immediately.
+
+        Called on entry unload so a mutation made within the delayed-save
+        window (e.g. right before an options-save reload) is persisted before
+        a fresh store instance reloads from disk — otherwise the pending write
+        would land on the old instance after the new one already read stale
+        data, and be lost on its next save.
+        """
+        await self._store.async_save(
+            {
+                "tasks": [attr.asdict(task) for task in self._tasks.values()],
+                "groups": sorted(self._groups),
+            }
         )

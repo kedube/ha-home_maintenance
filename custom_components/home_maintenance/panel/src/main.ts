@@ -6,19 +6,18 @@ import { localize } from '../localize/localize';
 import { loadConfigDashboard } from "./helpers";
 import { showToast } from './toast';
 import { commonStyle } from './styles'
-import { Debouncer, formatProgress, formatTimeInterval } from './util';
+import { Debouncer } from './util';
 import { EntityRegistryEntry, IntegrationConfig, Label, Task, Tag } from './types';
 import {
-    completeTask,
     getConfig,
     loadGroups,
     loadLabelRegistry,
     loadRegistryEntries,
     loadTags,
     loadTasks,
-    removeTask,
     subscribeUpdates,
 } from './data/websockets';
+import { confirmCompleteTask, confirmRemoveTask } from './components/task-actions'
 import './components/task-table'
 import './components/task-form'
 import './components/edit-dialog'
@@ -102,34 +101,7 @@ export class HomeMaintenancePanel extends LitElement {
     private _handleComplete(e: CustomEvent) {
         const task = this.tasks.find((t) => t.id === e.detail.taskId);
         if (!task) return;
-        const lang = this.hass!.language;
-        const isTime = (task.trigger_type ?? "time") === "time";
-        const interval = isTime
-            ? formatTimeInterval(task.interval_value, task.interval_type, lang)
-            : formatProgress(task);
-        this._confirmDialog?.open({
-            heading: localize('panel.dialog.confirm_complete.title', lang),
-            message: localize(
-                isTime
-                    ? 'panel.dialog.confirm_complete.message'
-                    : 'panel.dialog.confirm_complete.message_progress',
-                lang, '{title}', task.title, '{interval}', interval,
-            ),
-            confirmLabel: localize('panel.dialog.confirm_complete.actions.confirm', lang),
-            cancelLabel: localize('common.cancel', lang),
-            onConfirm: () => this._completeTask(task),
-        });
-    }
-
-    private async _completeTask(task: Task) {
-        const lang = this.hass!.language;
-        try {
-            await completeTask(this.hass!, task.id);
-            showToast(this, localize('panel.cards.current.alerts.complete_success', lang, '{title}', task.title));
-        } catch (e) {
-            console.error("Failed to complete task:", e);
-            showToast(this, localize('panel.cards.current.alerts.complete_error', lang));
-        }
+        confirmCompleteTask(this, this._confirmDialog, this.hass!, task);
     }
 
     private _handleMenuAction(e: CustomEvent) {
@@ -145,25 +117,8 @@ export class HomeMaintenancePanel extends LitElement {
     }
 
     private _handleRemove(taskId: string) {
-        const lang = this.hass!.language;
         const task = this.tasks.find((t) => t.id === taskId);
-        this._confirmDialog?.open({
-            heading: localize('panel.dialog.confirm_remove.title', lang),
-            message: localize('panel.dialog.confirm_remove.message', lang, '{title}', task?.title ?? ''),
-            confirmLabel: localize('panel.dialog.confirm_remove.actions.confirm', lang),
-            cancelLabel: localize('common.cancel', lang),
-            destructive: true,
-            onConfirm: () => this._removeTask(taskId),
-        });
-    }
-
-    private async _removeTask(taskId: string) {
-        try {
-            await removeTask(this.hass!, taskId);
-        } catch (e) {
-            console.error("Failed to remove task:", e);
-            showToast(this, localize('panel.cards.current.alerts.remove_error', this.hass!.language));
-        }
+        confirmRemoveTask(this, this._confirmDialog, this.hass!, task, taskId);
     }
 
     private _handleTaskAdded(e: CustomEvent) {

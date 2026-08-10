@@ -4,6 +4,53 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
+## Unreleased
+
+- Security: mutating websocket commands now require an admin user, matching
+  the panel's admin-only option (a non-admin could previously add/edit/delete
+  tasks and groups directly over the API). Notification "Open" URLs are
+  restricted to http(s), and task text fields are length-bounded.
+- Fixed: time-based tasks whose interval spans a daylight-saving fall-back no
+  longer come due a day early.
+- Fixed: duplicate push notifications when a processing pass overlapped a
+  task change; passes are now serialized and skipped entirely when no task
+  has notifications enabled.
+- Fixed: `notify_when: overdue` now fires for count/runtime tasks; a failing
+  notify target is retried at most once per day instead of every minute.
+- Fixed: count/runtime tasks that share a watched entity, or are retyped in
+  place, now keep their state listeners correctly wired; changing a task's
+  watched entity re-captures its baseline/counter.
+- Fixed: runtime tasks created or completed while their sensor is unavailable
+  no longer baseline at 0 (and read as instantly due); a transient sensor dip
+  no longer permanently zeroes the baseline.
+- Fixed: count tasks no longer miscount an `unavailable → on` reconnect as a
+  use; the maintenance calendar and entity area assignments no longer get
+  rewritten on unrelated changes or every restart.
+- Fixed: an options-save reload immediately after a task change no longer
+  loses that change; a single malformed stored record no longer aborts setup
+  of the whole integration; a tag-scanned event without a tag id no longer
+  completes tasks with orphaned tag references.
+- Fixed: `update_task` with an explicit `last_performed: null` no longer
+  silently marks the task completed today.
+
+## 1.5.19 — 2026-08-09
+
+- Added: per-task push notifications. Each task can pick a notify service
+  and send on due, overdue, or both, at a configurable time of day, with an
+  optional "days before due" early reminder for time-based tasks. At most
+  one notification per task and state is sent per day. Mobile app
+  notifications carry **Mark complete** and **Snooze** action buttons, plus
+  an optional **Open** action linking a configurable URL.
+- Added: `snooze_task` service (silence a task's notifications for N days
+  without completing it) and `send_task_notification` service (fire a
+  task's notification immediately); the edit dialog gained a **Send test
+  notification** button.
+- Added: a `calendar.home_maintenance` calendar entity with one all-day
+  event per time-based task on its next due date — upcoming maintenance
+  shows up in the Calendar dashboard, calendar cards, and calendar-trigger
+  automations. Count- and runtime-based tasks have no due date and are not
+  shown; overdue tasks stay on their original date.
+
 ## 1.5.18 — 2026-08-08
 
 - Fixed: the `reset_last_performed` service recorded the wrong day for

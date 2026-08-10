@@ -3,12 +3,17 @@
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.device_registry import DeviceInfo
 
 VERSION = "1.5.19"
 NAME = "Home Maintenance"
 MANUFACTURER = "@TJPoorman"
 
 DOMAIN = "home_maintenance"
+
+# Upper bound on user-supplied free-text fields, enforced by the websocket
+# schemas so a client cannot bloat the storage file with huge strings.
+MAX_STRING_LENGTH = 500
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
@@ -26,12 +31,35 @@ PANEL_NAME = "home-maintenance-panel"
 
 DEVICE_KEY = "home_maintenance_hub"
 
+
+def device_info() -> DeviceInfo:
+    """Return the shared hub DeviceInfo every entity attaches to."""
+    return DeviceInfo(
+        identifiers={(DOMAIN, DEVICE_KEY)},
+        name=NAME,
+        model=NAME,
+        sw_version=VERSION,
+        manufacturer=MANUFACTURER,
+    )
+
+
 # Dispatcher signals fired by the TaskStore on mutations. Entities, the
 # watched-entity listeners, and panel subscriptions all react to these.
 SIGNAL_TASK_ADDED = f"{DOMAIN}_task_added"  # payload: (task, labels)
-SIGNAL_TASK_UPDATED = f"{DOMAIN}_task_updated"  # payload: (task_id,)
 SIGNAL_TASK_REMOVED = f"{DOMAIN}_task_removed"  # payload: (task_id,)
 SIGNAL_TASKS_CHANGED = f"{DOMAIN}_tasks_changed"  # payload: none
+
+
+def signal_task_updated(task_id: str) -> str:
+    """
+    Per-task update signal name (payload: none).
+
+    Each task's entity subscribes to its own signal so an update dispatches to
+    exactly that entity, instead of a global signal every entity subscribes to
+    and then filters — which was O(n) per update.
+    """
+    return f"{DOMAIN}_task_updated_{task_id}"
+
 
 SERVICE_RESET = "reset_last_performed"
 SERVICE_RESET_SCHEMA = vol.Schema(
@@ -58,6 +86,11 @@ SERVICE_RESET_COUNT_SCHEMA = vol.Schema(
 # Per-task notifications. notify_when picks which due states notify;
 # the mobile action ids round-trip through mobile_app notification events.
 NOTIFY_WHEN_OPTIONS = ["due", "overdue", "due_and_overdue"]
+
+# Only these schemes are allowed for a task's notification "Open" URL, so a
+# task edit cannot smuggle a javascript:/intent:/file: target into a trusted
+# Home Assistant notification.
+NOTIFICATION_URL_SCHEMES = ("http", "https")
 NOTIFICATION_ACTION_COMPLETE = "HOME_MAINTENANCE_COMPLETE"
 NOTIFICATION_ACTION_SNOOZE = "HOME_MAINTENANCE_SNOOZE"
 DEFAULT_SNOOZE_DAYS = 1

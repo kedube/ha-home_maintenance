@@ -1,6 +1,5 @@
 """Config flow for Home Maintenance integration."""
 
-import secrets
 from typing import Any
 
 from homeassistant.config_entries import (
@@ -23,14 +22,16 @@ from .const import (
 class HomeMaintenanceConfigFlow(ConfigFlow, domain=DOMAIN):
     """Config flow for Home Maintenenance."""
 
-    VERSION = "1.1.0"
+    # HA's contract is an int; async_migrate_entry keys off this.
+    VERSION = 1
     CONNECTION_CLASS = CONN_CLASS_LOCAL_POLL
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle a flow initialized by the user."""
-        # Only allow a single instance
+        # Single-instance integration (also declared via single_config_entry
+        # in the manifest); no per-entry unique_id is needed.
         if self._async_current_entries():
             return self.async_abort(reason="single_instance_allowed")
 
@@ -38,11 +39,6 @@ class HomeMaintenanceConfigFlow(ConfigFlow, domain=DOMAIN):
             return self.async_show_form(
                 step_id="user", data_schema=CONFIG_STEP_USER_DATA_SCHEMA
             )
-
-        new_id = secrets.token_hex(6)
-
-        await self.async_set_unique_id(new_id)
-        self._abort_if_unique_id_configured(updates=user_input)
 
         return self.async_create_entry(
             title=NAME,

@@ -45,6 +45,13 @@ async def async_register_panel(hass: HomeAssistant, entry: ConfigEntry) -> None:
         "sidebar_title", entry.data.get("sidebar_title", PANEL_TITLE)
     )
 
+    # Make registration idempotent. panel_custom.async_register_panel has no
+    # update flag and raises ValueError("Overwriting panel ...") if the path
+    # is already registered — which would strand the integration if a prior
+    # setup failed after registering the panel (HA skips unload for a
+    # setup-errored entry, so the stale panel would never be removed).
+    frontend.async_remove_panel(hass, PANEL_URL, warn_if_unknown=False)
+
     await panel_custom.async_register_panel(
         hass,
         webcomponent_name=PANEL_NAME,
@@ -59,5 +66,5 @@ async def async_register_panel(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 def async_unregister_panel(hass: HomeAssistant) -> None:
     """Remove custom panel for Home Maintenenance."""
-    frontend.async_remove_panel(hass, PANEL_URL)
+    frontend.async_remove_panel(hass, PANEL_URL, warn_if_unknown=False)
     _LOGGER.debug("Removing panel")

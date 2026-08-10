@@ -442,3 +442,136 @@ async def test_commands_after_unload_return_error(
     response = await client.receive_json()
     assert not response["success"]
     assert response["error"]["code"] == "invalid_input"
+
+
+async def test_mutating_commands_require_admin(
+    hass, setup_entry, hass_ws_client, hass_read_only_access_token
+) -> None:
+    """A non-admin user cannot add/update/remove tasks or manage groups."""
+    admin = await hass_ws_client(hass)
+    task_id = await add_task_via_ws(admin)
+
+    client = await hass_ws_client(hass, hass_read_only_access_token)
+
+    for message in (
+        {
+            "type": "home_maintenance/add_task",
+            "title": "x",
+            "interval_value": 1,
+            "interval_type": "days",
+        },
+        {
+            "type": "home_maintenance/update_task",
+            "task_id": task_id,
+            "updates": {"title": "hacked"},
+        },
+        {"type": "home_maintenance/remove_task", "task_id": task_id},
+        {"type": "home_maintenance/complete_task", "task_id": task_id},
+        {"type": "home_maintenance/create_group", "group_id": "G"},
+        {"type": "home_maintenance/delete_group", "group_id": "G"},
+    ):
+        await client.send_json_auto_id(message)
+        response = await client.receive_json()
+        assert not response["success"], message
+        assert response["error"]["code"] == "unauthorized", message
+
+    # Read-only commands still work for a non-admin.
+    await client.send_json_auto_id({"type": "home_maintenance/get_tasks"})
+    assert (await client.receive_json())["success"]
+
+
+async def test_update_last_performed_null_does_not_complete(
+    hass, setup_entry, hass_ws_client
+) -> None:
+    """An explicit last_performed: null must not silently mark the task done."""
+    client = await hass_ws_client(hass)
+    task_id = await add_task_via_ws(
+        client, last_performed="2020-01-01", interval_value=30, interval_type="days"
+    )
+
+    await client.send_json_auto_id(
+        {"type": "home_maintenance/get_task", "task_id": task_id}
+    )
+    original = (await client.receive_json())["result"]["last_performed"]
+
+    await client.send_json_auto_id(
+        {
+            "type": "home_maintenance/update_task",
+            "task_id": task_id,
+            "updates": {"last_performed": None, "title": "Renamed"},
+        }
+    )
+    assert (await client.receive_json())["success"]
+
+    await client.send_json_auto_id(
+        {"type": "home_maintenance/get_task", "task_id": task_id}
+    )
+    task = (await client.receive_json())["result"]
+    # Title changed, but the completion date was left untouched (not today).
+    assert task["title"] == "Renamed"
+    assert task["last_performed"] == original
+
+
+async def test_notification_url_scheme_rejected(
+    hass, setup_entry, hass_ws_client
+) -> None:
+    """A non-http(s) notification_url is rejected by the schema."""
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {
+            "type": "home_maintenance/add_task",
+            "title": "Bad URL",
+            "interval_value": 1,
+            "interval_type": "days",
+            "notification_url": "javascript:alert(1)",
+        }
+    )
+    response = await client.receive_json()
+    assert not response["success"]
+
+
+async def test_oversized_string_rejected(hass, setup_entry, hass_ws_client) -> None:
+    """A title beyond the length bound is rejected."""
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {
+            "type": "home_maintenance/add_task",
+            "title": "x" * 5000,
+            "interval_value": 1,
+            "interval_type": "days",
+        }
+    )
+    response = await client.receive_json()
+    assert not response["success"]
+
+
+async def test_update_watched_entity_rebaselines(
+    hass, setup_entry, hass_ws_client
+) -> None:
+    """Changing a runtime task's sensor re-captures the baseline."""
+    hass.states.async_set("sensor.a", "100")
+    hass.states.async_set("sensor.b", "5000")
+    client = await hass_ws_client(hass)
+    task_id = await add_task_via_ws(
+        client,
+        trigger_type="runtime",
+        runtime_entity_id="sensor.a",
+        runtime_threshold=50,
+    )
+
+    await client.send_json_auto_id(
+        {
+            "type": "home_maintenance/update_task",
+            "task_id": task_id,
+            "updates": {"runtime_entity_id": "sensor.b"},
+        }
+    )
+    assert (await client.receive_json())["success"]
+
+    await client.send_json_auto_id(
+        {"type": "home_maintenance/get_task", "task_id": task_id}
+    )
+    task = (await client.receive_json())["result"]
+    # Baseline re-captured from sensor.b (5000), so not instantly due.
+    assert task["runtime_baseline"] == 5000
+    assert task["due"] is False

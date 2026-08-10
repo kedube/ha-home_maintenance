@@ -5,16 +5,14 @@ import { formatDateNumeric } from "custom-card-helpers";
 
 import { localize } from '../localize/localize';
 import { loadConfigDashboard } from './helpers';
-import { showToast } from './toast';
 import { Debouncer, formatProgress, formatTriggerInterval, parseStoredDate } from './util';
 import { Task } from './types';
 import {
-    completeTask,
     loadGroups,
     loadTasks,
-    removeTask,
     subscribeUpdates,
 } from './data/websockets';
+import { confirmCompleteTask, confirmRemoveTask } from './components/task-actions';
 import './components/confirm-dialog';
 import type { HMConfirmDialog } from './components/confirm-dialog';
 
@@ -207,63 +205,22 @@ class HomeMaintenanceTodoCard extends LitElement {
 
     private _completeTask(task: Task) {
         if (this._completing.has(task.id)) return;
-        const lang = this.hass!.language;
-        const isTime = (task.trigger_type ?? "time") === "time";
-        this._confirmDialog?.open({
-            heading: localize('panel.dialog.confirm_complete.title', lang),
-            message: localize(
-                isTime
-                    ? 'panel.dialog.confirm_complete.message'
-                    : 'panel.dialog.confirm_complete.message_progress',
-                lang, '{title}', task.title,
-                '{interval}', isTime ? formatTriggerInterval(task, lang) : formatProgress(task),
-            ),
-            confirmLabel: localize('panel.dialog.confirm_complete.actions.confirm', lang),
-            cancelLabel: localize('common.cancel', lang),
-            onConfirm: () => this._doCompleteTask(task),
+        // Wrap the shared action to drive the per-task in-flight spinner.
+        confirmCompleteTask(this, this._confirmDialog, this.hass!, task, async (action) => {
+            this._completing = new Set(this._completing).add(task.id);
+            try {
+                await action();
+            } finally {
+                const after = new Set(this._completing);
+                after.delete(task.id);
+                this._completing = after;
+            }
         });
-    }
-
-    private async _doCompleteTask(task: Task) {
-        const next = new Set(this._completing);
-        next.add(task.id);
-        this._completing = next;
-
-        const lang = this.hass!.language;
-        try {
-            // No explicit reload: the subscribe_updates push refreshes the card.
-            await completeTask(this.hass!, task.id);
-            showToast(this, localize('panel.cards.current.alerts.complete_success', lang, '{title}', task.title));
-        } catch (e) {
-            console.error("Failed to complete task:", e);
-            showToast(this, localize('panel.cards.current.alerts.complete_error', lang));
-        }
-
-        const after = new Set(this._completing);
-        after.delete(task.id);
-        this._completing = after;
     }
 
     private _removeTask(taskId: string) {
-        const lang = this.hass!.language;
         const task = this._tasks.find((t) => t.id === taskId);
-        this._confirmDialog?.open({
-            heading: localize('panel.dialog.confirm_remove.title', lang),
-            message: localize('panel.dialog.confirm_remove.message', lang, '{title}', task?.title ?? ''),
-            confirmLabel: localize('panel.dialog.confirm_remove.actions.confirm', lang),
-            cancelLabel: localize('common.cancel', lang),
-            destructive: true,
-            onConfirm: () => this._doRemoveTask(taskId),
-        });
-    }
-
-    private async _doRemoveTask(taskId: string) {
-        try {
-            await removeTask(this.hass!, taskId);
-        } catch (e) {
-            console.error("Failed to remove task:", e);
-            showToast(this, localize('panel.cards.current.alerts.remove_error', this.hass!.language));
-        }
+        confirmRemoveTask(this, this._confirmDialog, this.hass!, task, taskId);
     }
 
     private _toggleExpand(taskId: string) {

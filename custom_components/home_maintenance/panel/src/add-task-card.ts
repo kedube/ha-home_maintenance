@@ -5,6 +5,7 @@ import { fireEvent } from "custom-card-helpers";
 
 import { localize } from '../localize/localize';
 import { loadConfigDashboard } from './helpers';
+import { Debouncer } from './util';
 import { loadGroups, subscribeUpdates } from './data/websockets';
 import './components/task-form';
 
@@ -31,7 +32,7 @@ class HomeMaintenanceAddTaskCard extends LitElement {
     @state() private _ready = false;
 
     private _unsubscribe?: () => Promise<void>;
-    private _reloadTimer?: ReturnType<typeof setTimeout>;
+    private _reload = new Debouncer(() => this._loadGroups(), RELOAD_DEBOUNCE_MS);
     private _initialized = false;
 
     setConfig(config: CardConfig) {
@@ -52,7 +53,7 @@ class HomeMaintenanceAddTaskCard extends LitElement {
 
     disconnectedCallback() {
         super.disconnectedCallback();
-        if (this._reloadTimer !== undefined) clearTimeout(this._reloadTimer);
+        this._reload.cancel();
         this._unsubscribe?.();
         this._unsubscribe = undefined;
         this._initialized = false;
@@ -72,18 +73,10 @@ class HomeMaintenanceAddTaskCard extends LitElement {
         this._ready = true;
         await this._loadGroups();
         try {
-            this._unsubscribe = await subscribeUpdates(this.hass!, () => this._scheduleReload());
+            this._unsubscribe = await subscribeUpdates(this.hass!, () => this._reload.schedule());
         } catch (e) {
             console.error("Failed to subscribe to task updates:", e);
         }
-    }
-
-    private _scheduleReload() {
-        if (this._reloadTimer !== undefined) clearTimeout(this._reloadTimer);
-        this._reloadTimer = setTimeout(() => {
-            this._reloadTimer = undefined;
-            this._loadGroups();
-        }, RELOAD_DEBOUNCE_MS);
     }
 
     private async _loadGroups() {

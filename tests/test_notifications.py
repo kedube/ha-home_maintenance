@@ -149,6 +149,47 @@ async def test_notify_when_due_skips_overdue(hass, setup_entry) -> None:
     assert len(calls) == 0
 
 
+async def test_count_task_notify_when_overdue_fires(hass, setup_entry) -> None:
+    """A dateless task with notify_when='overdue' still notifies when due."""
+    calls = async_mock_service(hass, "notify", "mobile_test")
+    data: HomeMaintenanceData = hass.data[DOMAIN]
+
+    data.store.add(
+        make_task(
+            trigger_type="count",
+            count_entity_id="switch.test",
+            count_threshold=1,
+            notify_when="overdue",
+        )
+    )
+    await hass.async_block_till_done()
+    assert len(calls) == 0
+
+    data.store.increment_count("home_maintenance_notify_test")
+    await hass.async_block_till_done()
+    assert len(calls) == 1
+
+
+async def test_failing_target_retried_at_most_once_per_day(
+    hass, setup_entry, caplog
+) -> None:
+    """A missing notify target is not retried (or re-logged) every pass."""
+    data: HomeMaintenanceData = hass.data[DOMAIN]
+
+    # No matching notify service is registered, so the call raises.
+    data.store.add(make_task(notification_target="notify.gone"))
+    await hass.async_block_till_done()
+
+    warnings = [r for r in caplog.records if "Failed to send notification" in r.message]
+    assert len(warnings) == 1
+
+    caplog.clear()
+    await data.notifications.async_process_notifications()
+    await hass.async_block_till_done()
+    # Second pass same day: no retry, no second warning.
+    assert not [r for r in caplog.records if "Failed to send notification" in r.message]
+
+
 async def test_due_count_task_notifies(hass, setup_entry) -> None:
     calls = async_mock_service(hass, "notify", "mobile_test")
     data: HomeMaintenanceData = hass.data[DOMAIN]

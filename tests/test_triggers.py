@@ -160,3 +160,62 @@ async def test_runtime_trigger_on_complete_rebaselines(hass) -> None:
     trigger.on_complete(hass, task)
     assert task.runtime_baseline == 130
     assert trigger.delta(hass, task) == 0
+
+
+async def test_runtime_initialize_unavailable_is_pending(hass) -> None:
+    """Init while unavailable leaves the baseline pending (None), not 0."""
+    trigger = get_trigger("runtime")
+    task = make_task(
+        trigger_type="runtime",
+        runtime_entity_id="sensor.pump_hours",
+        runtime_threshold=20,
+    )
+    hass.states.async_set("sensor.pump_hours", "unavailable")
+    trigger.initialize(hass, task)
+    assert task.runtime_baseline is None
+    assert trigger.is_due(hass, task) is False
+
+
+async def test_runtime_on_complete_unavailable_is_pending(hass) -> None:
+    """Completing while unavailable leaves the baseline pending, not stale."""
+    trigger = get_trigger("runtime")
+    task = make_task(
+        trigger_type="runtime",
+        runtime_entity_id="sensor.pump_hours",
+        runtime_threshold=20,
+        runtime_baseline=100,
+    )
+    hass.states.async_set("sensor.pump_hours", "unavailable")
+    trigger.on_complete(hass, task)
+    assert task.runtime_baseline is None
+
+
+async def test_time_trigger_dst_fall_back_no_off_by_one(hass) -> None:
+    """A 21-day interval spanning the US DST fall-back stays on the right day."""
+    from zoneinfo import ZoneInfo
+
+    from homeassistant.util import dt as dt_util_mod
+
+    original = dt_util_mod.get_default_time_zone()
+    dt_util_mod.set_default_time_zone(ZoneInfo("America/New_York"))
+    try:
+        trigger = get_trigger("time")
+        # Completed Oct 20 (EDT, -04:00); +21 days lands after the Nov 1
+        # fall-back. The due date must be Nov 10, not Nov 9.
+        task = make_task(
+            interval_value=21,
+            interval_type="days",
+            last_performed="2026-10-20T00:00:00-04:00",
+        )
+        due = trigger.next_due(hass, task)
+        assert due.date().isoformat() == "2026-11-10"
+
+        # Monthly interval across the same boundary: Oct 15 -> Nov 15.
+        task_m = make_task(
+            interval_value=1,
+            interval_type="months",
+            last_performed="2026-10-15T00:00:00-04:00",
+        )
+        assert trigger.next_due(hass, task_m).date().isoformat() == "2026-11-15"
+    finally:
+        dt_util_mod.set_default_time_zone(original)

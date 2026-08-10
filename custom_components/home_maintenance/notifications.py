@@ -10,6 +10,7 @@ Home Assistant mobile apps.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
@@ -21,6 +22,7 @@ from homeassistant.helpers.event import async_track_time_change
 from homeassistant.util import dt as dt_util
 
 from . import const
+from .datetime_utils import parse_local_datetime
 from .triggers import get_trigger
 
 if TYPE_CHECKING:
@@ -64,6 +66,12 @@ class NotificationManager:
         """Initialize the notification manager."""
         self.hass = hass
         self._store = store
+        # Serializes processing passes so an in-flight (awaiting) send can't
+        # overlap with a second pass and double-send the same task/kind/day.
+        self._lock = asyncio.Lock()
+        # Tasks whose last send failed, with the day it failed on, so a broken
+        # notify target is retried at most once per day instead of every tick.
+        self._send_failed_on: dict[str, str] = {}
 
     @callback
     def async_setup(self) -> list[CALLBACK_TYPE]:
@@ -84,13 +92,20 @@ class NotificationManager:
 
     @callback
     def _schedule_processing(self, *_args: Any) -> None:
-        """Queue notification processing from sync callback contexts."""
+        """Queue a processing pass, unless any task even wants notifications."""
+        # Skip the whole O(n) pass (and its per-task datetime parsing) when no
+        # task has notifications enabled — the common case for most installs.
+        if not any(t.notifications_enabled for t in self._store.tasks.values()):
+            return
         self.hass.async_create_task(self.async_process_notifications())
 
     async def async_process_notifications(self) -> None:
-        """Send any notifications that are currently due."""
-        for task_id in list(self._store.tasks):
-            await self.async_send_notification(task_id)
+        """Send any notifications that are currently due (one pass at a time)."""
+        # The lock makes overlapping passes run sequentially, so the second
+        # pass sees the last_notification_date the first one just committed.
+        async with self._lock:
+            for task_id in list(self._store.tasks):
+                await self.async_send_notification(task_id)
 
     async def async_send_notification(
         self, task_id: str, *, force: bool = False
@@ -113,6 +128,10 @@ class NotificationManager:
             kind = kind or "manual"
         elif not self._should_send_now(task, kind, now, today):
             return False
+        elif self._send_failed_on.get(task_id) == today:
+            # A send already failed today (e.g. the notify target is gone) —
+            # don't retry every minute and spam the log; try again tomorrow.
+            return False
 
         domain, service = resolve_notify_service(task.notification_target)
         try:
@@ -126,15 +145,21 @@ class NotificationManager:
                 },
                 blocking=True,
             )
-        except HomeAssistantError:
-            _LOGGER.exception(
-                "Failed to send notification for task %s via %s.%s",
-                task_id,
-                domain,
-                service,
-            )
+        except HomeAssistantError as err:
+            # One concise warning per failure day, not a per-minute traceback.
+            if self._send_failed_on.get(task_id) != today:
+                _LOGGER.warning(
+                    "Failed to send notification for task %s via %s.%s: %s",
+                    task_id,
+                    domain,
+                    service,
+                    err,
+                )
+            if not force:
+                self._send_failed_on[task_id] = today
             return False
 
+        self._send_failed_on.pop(task_id, None)
         self._store.update_notification_state(
             task_id,
             last_notification_kind=kind,
@@ -199,10 +224,10 @@ class NotificationManager:
         next_due = trigger.next_due(self.hass, task)
 
         if next_due is None:
-            if trigger.is_due(self.hass, task) and task.notify_when in (
-                "due",
-                "due_and_overdue",
-            ):
+            # Dateless (count/runtime) tasks have no due-day vs overdue-day
+            # distinction: being over threshold satisfies any notify_when,
+            # including "overdue" (otherwise that option would never fire).
+            if trigger.is_due(self.hass, task):
                 return ("due", None)
             return (None, None)
 
@@ -221,13 +246,9 @@ class NotificationManager:
 
     def _is_snoozed(self, task: HomeMaintenanceTask) -> bool:
         """Whether the task's snooze window covers today."""
-        if not task.snooze_until:
-            return False
-        snooze_until = dt_util.parse_datetime(task.snooze_until)
+        snooze_until = parse_local_datetime(task.snooze_until)
         if snooze_until is None:
             return False
-        if snooze_until.tzinfo is None:
-            snooze_until = snooze_until.replace(tzinfo=dt_util.get_default_time_zone())
         return dt_util.start_of_local_day() < snooze_until
 
     @staticmethod

@@ -1,4 +1,12 @@
-"""Websocket commands for the Home Maintenance integration."""
+"""
+Websocket commands for the Home Maintenance integration.
+
+Each command is declared with @websocket_api.websocket_command so its schema
+sits next to its handler and registration is a single loop at the bottom.
+Mutating commands additionally carry @websocket_api.require_admin: the panel's
+admin_only option only hides the sidebar, so without this any authenticated
+user could add/update/delete tasks and groups directly over the API.
+"""
 
 from __future__ import annotations
 
@@ -8,52 +16,45 @@ from typing import TYPE_CHECKING, Any
 
 import voluptuous as vol
 from homeassistant.components import websocket_api
-from homeassistant.components.websocket_api import connection, messages
+from homeassistant.components.websocket_api import connection
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.util import dt as dt_util
 
-from .const import (
-    DOMAIN,
-    NOTIFY_WHEN_OPTIONS,
-    SIGNAL_TASKS_CHANGED,
-    VERSION,
-)
+from .const import DOMAIN, SIGNAL_TASKS_CHANGED, VERSION
 from .store import HomeMaintenanceTask
+from .task_fields import ADD_TASK_FIELDS, INTERVAL_TYPES, TASK_FIELD_VALIDATORS
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from .store import TaskStore
 
-TRIGGER_TYPES = ["time", "count", "runtime"]
-INTERVAL_TYPES = ["days", "weeks", "months"]
+# Add-task schema: required core fields plus every optional task field, all
+# generated from the single field map so a new field is one edit there.
+_ADD_TASK_SCHEMA = {
+    vol.Required("type"): "home_maintenance/add_task",
+    vol.Required("title"): TASK_FIELD_VALIDATORS["title"],
+    vol.Required("interval_value"): TASK_FIELD_VALIDATORS["interval_value"],
+    vol.Required("interval_type"): vol.In(INTERVAL_TYPES),
+    vol.Optional("last_performed"): vol.Any(str, None),
+    vol.Optional("labels"): [str],
+    **{
+        vol.Optional(field): TASK_FIELD_VALIDATORS[field]
+        for field in ADD_TASK_FIELDS
+        if field not in ("title", "interval_value", "interval_type")
+    },
+}
 
-# Explicit whitelist schema for task updates: the API cannot touch managed
-# fields (id, current_count, runtime_baseline) or unknown attributes.
-UPDATES_SCHEMA = vol.Schema(
+# Update schema: the same field validators, all optional, plus labels (which
+# live on the entity registry, not the task).
+_UPDATES_SCHEMA = vol.Schema(
     {
-        vol.Optional("title"): str,
-        vol.Optional("trigger_type"): vol.In(TRIGGER_TYPES),
-        vol.Optional("interval_value"): int,
-        vol.Optional("interval_type"): vol.In(INTERVAL_TYPES),
-        vol.Optional("last_performed"): vol.Any(str, None),
-        vol.Optional("icon"): vol.Any(str, None),
         vol.Optional("labels"): [str],
-        vol.Optional("tag_id"): vol.Any(str, None),
-        vol.Optional("area_id"): vol.Any(str, None),
-        vol.Optional("description"): vol.Any(str, None),
-        vol.Optional("count_entity_id"): vol.Any(str, None),
-        vol.Optional("count_threshold"): vol.Coerce(int),
-        vol.Optional("runtime_entity_id"): vol.Any(str, None),
-        vol.Optional("runtime_threshold"): vol.Coerce(float),
-        vol.Optional("group_id"): vol.Any(str, None),
-        vol.Optional("notifications_enabled"): bool,
-        vol.Optional("notification_target"): vol.Any(str, None),
-        vol.Optional("notification_time"): str,
-        vol.Optional("notification_url"): vol.Any(str, None),
-        vol.Optional("notify_when"): vol.In(NOTIFY_WHEN_OPTIONS),
-        vol.Optional("notify_days_before_due"): vol.Any(None, vol.Coerce(int)),
+        **{
+            vol.Optional(field): validator
+            for field, validator in TASK_FIELD_VALIDATORS.items()
+        },
     }
 )
 
@@ -101,6 +102,18 @@ def _normalize_last_performed(last_str: str | None) -> str | None:
     return dt_util.start_of_local_day(dt_util.as_local(parsed)).isoformat()
 
 
+# Handlers registered at import time; async_register_websockets registers them.
+_COMMANDS: list[_WsHandler] = []
+
+
+def _register(handler: _WsHandler) -> _WsHandler:
+    """Collect a decorated command handler for later registration."""
+    _COMMANDS.append(handler)
+    return handler
+
+
+@_register
+@websocket_api.websocket_command({vol.Required("type"): "home_maintenance/get_tasks"})
 @callback
 @_handle_store_errors
 def websocket_get_tasks(
@@ -110,6 +123,13 @@ def websocket_get_tasks(
     connection.send_result(msg["id"], _get_store(hass).get_all())
 
 
+@_register
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "home_maintenance/get_task",
+        vol.Required("task_id"): str,
+    }
+)
 @callback
 @_handle_store_errors
 def websocket_get_task(
@@ -123,6 +143,9 @@ def websocket_get_task(
     connection.send_result(msg["id"], result)
 
 
+@_register
+@websocket_api.require_admin
+@websocket_api.websocket_command({**_ADD_TASK_SCHEMA})
 @callback
 @_handle_store_errors
 def websocket_add_task(
@@ -138,34 +161,26 @@ def websocket_add_task(
         )
         return
 
+    fields = {field: msg[field] for field in ADD_TASK_FIELDS if field in msg}
     new_task = HomeMaintenanceTask(
         id=f"home_maintenance_{uuid.uuid4().hex}",
-        title=msg["title"],
-        interval_value=msg["interval_value"],
-        interval_type=msg["interval_type"],
         last_performed=last_performed,
-        tag_id=msg.get("tag_id"),
-        icon=msg.get("icon"),
-        trigger_type=msg.get("trigger_type", "time"),
-        count_entity_id=msg.get("count_entity_id"),
-        count_threshold=msg.get("count_threshold", 0),
-        runtime_entity_id=msg.get("runtime_entity_id"),
-        runtime_threshold=float(msg.get("runtime_threshold") or 0),
-        area_id=msg.get("area_id"),
-        description=msg.get("description"),
-        group_id=msg.get("group_id"),
-        notifications_enabled=msg.get("notifications_enabled", False),
-        notification_target=msg.get("notification_target"),
-        notification_time=msg.get("notification_time", "09:00"),
-        notification_url=msg.get("notification_url"),
-        notify_when=msg.get("notify_when", "due_and_overdue"),
-        notify_days_before_due=msg.get("notify_days_before_due"),
+        **fields,
     )
 
     new_id = store.add(new_task, msg.get("labels", []))
     connection.send_result(msg["id"], {"success": True, "id": new_id})
 
 
+@_register
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "home_maintenance/update_task",
+        vol.Required("task_id"): str,
+        vol.Required("updates"): _UPDATES_SCHEMA,
+    }
+)
 @callback
 @_handle_store_errors
 def websocket_update_task(
@@ -175,7 +190,10 @@ def websocket_update_task(
     store = _get_store(hass)
     updates = dict(msg.get("updates", {}))
 
-    if "last_performed" in updates:
+    # Only normalize last_performed when a real value was sent. An explicit
+    # null (allowed by the schema) is dropped rather than silently rewritten
+    # to today — which would mark the task completed today.
+    if updates.get("last_performed"):
         last_performed = _normalize_last_performed(updates["last_performed"])
         if last_performed is None:
             connection.send_error(
@@ -185,11 +203,21 @@ def websocket_update_task(
             )
             return
         updates["last_performed"] = last_performed
+    else:
+        updates.pop("last_performed", None)
 
     store.update_task(msg["task_id"], updates)
     connection.send_result(msg["id"], {"success": True})
 
 
+@_register
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "home_maintenance/complete_task",
+        vol.Required("task_id"): str,
+    }
+)
 @callback
 @_handle_store_errors
 def websocket_complete_task(
@@ -200,6 +228,14 @@ def websocket_complete_task(
     connection.send_result(msg["id"], {"success": True})
 
 
+@_register
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "home_maintenance/remove_task",
+        vol.Required("task_id"): str,
+    }
+)
 @callback
 @_handle_store_errors
 def websocket_remove_task(
@@ -210,6 +246,14 @@ def websocket_remove_task(
     connection.send_result(msg["id"], {"success": True})
 
 
+@_register
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "home_maintenance/increment_count",
+        vol.Required("task_id"): str,
+    }
+)
 @callback
 @_handle_store_errors
 def websocket_increment_count(
@@ -220,6 +264,14 @@ def websocket_increment_count(
     connection.send_result(msg["id"], {"success": True})
 
 
+@_register
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "home_maintenance/reset_count",
+        vol.Required("task_id"): str,
+    }
+)
 @callback
 @_handle_store_errors
 def websocket_reset_count(
@@ -230,6 +282,8 @@ def websocket_reset_count(
     connection.send_result(msg["id"], {"success": True})
 
 
+@_register
+@websocket_api.websocket_command({vol.Required("type"): "home_maintenance/get_groups"})
 @callback
 @_handle_store_errors
 def websocket_get_groups(
@@ -239,6 +293,14 @@ def websocket_get_groups(
     connection.send_result(msg["id"], _get_store(hass).get_groups())
 
 
+@_register
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "home_maintenance/create_group",
+        vol.Required("group_id"): str,
+    }
+)
 @callback
 @_handle_store_errors
 def websocket_create_group(
@@ -249,6 +311,15 @@ def websocket_create_group(
     connection.send_result(msg["id"], {"success": True})
 
 
+@_register
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "home_maintenance/rename_group",
+        vol.Required("old_group_id"): str,
+        vol.Required("new_group_id"): str,
+    }
+)
 @callback
 @_handle_store_errors
 def websocket_rename_group(
@@ -259,6 +330,14 @@ def websocket_rename_group(
     connection.send_result(msg["id"], {"success": True})
 
 
+@_register
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "home_maintenance/delete_group",
+        vol.Required("group_id"): str,
+    }
+)
 @callback
 @_handle_store_errors
 def websocket_delete_group(
@@ -269,6 +348,10 @@ def websocket_delete_group(
     connection.send_result(msg["id"], {"success": True})
 
 
+@_register
+@websocket_api.websocket_command(
+    {vol.Required("type"): "home_maintenance/subscribe_updates"}
+)
 @callback
 def websocket_subscribe_updates(
     hass: HomeAssistant, connection: connection.ActiveConnection, msg: dict[str, Any]
@@ -287,6 +370,8 @@ def websocket_subscribe_updates(
     connection.send_result(msg["id"])
 
 
+@_register
+@websocket_api.websocket_command({vol.Required("type"): "home_maintenance/get_config"})
 @callback
 def websocket_get_config(
     hass: HomeAssistant, connection: connection.ActiveConnection, msg: dict[str, Any]
@@ -313,185 +398,6 @@ def websocket_get_config(
 
 
 async def async_register_websockets(hass: HomeAssistant) -> None:
-    """Register websocket commands."""
-    websocket_api.async_register_command(
-        hass,
-        "home_maintenance/get_tasks",
-        websocket_get_tasks,
-        messages.BASE_COMMAND_MESSAGE_SCHEMA.extend(
-            {vol.Required("type"): "home_maintenance/get_tasks"}
-        ),
-    )
-
-    websocket_api.async_register_command(
-        hass,
-        "home_maintenance/get_task",
-        websocket_get_task,
-        messages.BASE_COMMAND_MESSAGE_SCHEMA.extend(
-            {
-                vol.Required("type"): "home_maintenance/get_task",
-                vol.Required("task_id"): str,
-            }
-        ),
-    )
-
-    websocket_api.async_register_command(
-        hass,
-        "home_maintenance/add_task",
-        websocket_add_task,
-        messages.BASE_COMMAND_MESSAGE_SCHEMA.extend(
-            {
-                vol.Required("type"): "home_maintenance/add_task",
-                vol.Required("title"): str,
-                vol.Required("interval_value"): int,
-                vol.Required("interval_type"): vol.In(INTERVAL_TYPES),
-                vol.Optional("last_performed"): str,
-                vol.Optional("tag_id"): str,
-                vol.Optional("icon"): str,
-                vol.Optional("labels"): [str],
-                vol.Optional("trigger_type"): vol.In(TRIGGER_TYPES),
-                vol.Optional("count_entity_id"): str,
-                vol.Optional("count_threshold"): int,
-                vol.Optional("runtime_entity_id"): str,
-                vol.Optional("runtime_threshold"): vol.Coerce(float),
-                vol.Optional("area_id"): vol.Any(str, None),
-                vol.Optional("description"): vol.Any(str, None),
-                vol.Optional("group_id"): vol.Any(str, None),
-                vol.Optional("notifications_enabled"): bool,
-                vol.Optional("notification_target"): vol.Any(str, None),
-                vol.Optional("notification_time"): str,
-                vol.Optional("notification_url"): vol.Any(str, None),
-                vol.Optional("notify_when"): vol.In(NOTIFY_WHEN_OPTIONS),
-                vol.Optional("notify_days_before_due"): vol.Any(None, vol.Coerce(int)),
-            }
-        ),
-    )
-
-    websocket_api.async_register_command(
-        hass,
-        "home_maintenance/update_task",
-        websocket_update_task,
-        messages.BASE_COMMAND_MESSAGE_SCHEMA.extend(
-            {
-                vol.Required("type"): "home_maintenance/update_task",
-                vol.Required("task_id"): str,
-                vol.Required("updates"): UPDATES_SCHEMA,
-            }
-        ),
-    )
-
-    websocket_api.async_register_command(
-        hass,
-        "home_maintenance/complete_task",
-        websocket_complete_task,
-        messages.BASE_COMMAND_MESSAGE_SCHEMA.extend(
-            {
-                vol.Required("type"): "home_maintenance/complete_task",
-                vol.Required("task_id"): str,
-            }
-        ),
-    )
-
-    websocket_api.async_register_command(
-        hass,
-        "home_maintenance/remove_task",
-        websocket_remove_task,
-        messages.BASE_COMMAND_MESSAGE_SCHEMA.extend(
-            {
-                vol.Required("type"): "home_maintenance/remove_task",
-                vol.Required("task_id"): str,
-            }
-        ),
-    )
-
-    websocket_api.async_register_command(
-        hass,
-        "home_maintenance/increment_count",
-        websocket_increment_count,
-        messages.BASE_COMMAND_MESSAGE_SCHEMA.extend(
-            {
-                vol.Required("type"): "home_maintenance/increment_count",
-                vol.Required("task_id"): str,
-            }
-        ),
-    )
-
-    websocket_api.async_register_command(
-        hass,
-        "home_maintenance/reset_count",
-        websocket_reset_count,
-        messages.BASE_COMMAND_MESSAGE_SCHEMA.extend(
-            {
-                vol.Required("type"): "home_maintenance/reset_count",
-                vol.Required("task_id"): str,
-            }
-        ),
-    )
-
-    websocket_api.async_register_command(
-        hass,
-        "home_maintenance/get_groups",
-        websocket_get_groups,
-        messages.BASE_COMMAND_MESSAGE_SCHEMA.extend(
-            {vol.Required("type"): "home_maintenance/get_groups"}
-        ),
-    )
-
-    websocket_api.async_register_command(
-        hass,
-        "home_maintenance/create_group",
-        websocket_create_group,
-        messages.BASE_COMMAND_MESSAGE_SCHEMA.extend(
-            {
-                vol.Required("type"): "home_maintenance/create_group",
-                vol.Required("group_id"): str,
-            }
-        ),
-    )
-
-    websocket_api.async_register_command(
-        hass,
-        "home_maintenance/rename_group",
-        websocket_rename_group,
-        messages.BASE_COMMAND_MESSAGE_SCHEMA.extend(
-            {
-                vol.Required("type"): "home_maintenance/rename_group",
-                vol.Required("old_group_id"): str,
-                vol.Required("new_group_id"): str,
-            }
-        ),
-    )
-
-    websocket_api.async_register_command(
-        hass,
-        "home_maintenance/delete_group",
-        websocket_delete_group,
-        messages.BASE_COMMAND_MESSAGE_SCHEMA.extend(
-            {
-                vol.Required("type"): "home_maintenance/delete_group",
-                vol.Required("group_id"): str,
-            }
-        ),
-    )
-
-    websocket_api.async_register_command(
-        hass,
-        "home_maintenance/subscribe_updates",
-        websocket_subscribe_updates,
-        messages.BASE_COMMAND_MESSAGE_SCHEMA.extend(
-            {
-                vol.Required("type"): "home_maintenance/subscribe_updates",
-            }
-        ),
-    )
-
-    websocket_api.async_register_command(
-        hass,
-        "home_maintenance/get_config",
-        websocket_get_config,
-        messages.BASE_COMMAND_MESSAGE_SCHEMA.extend(
-            {
-                vol.Required("type"): "home_maintenance/get_config",
-            }
-        ),
-    )
+    """Register every collected websocket command."""
+    for handler in _COMMANDS:
+        websocket_api.async_register_command(hass, handler)

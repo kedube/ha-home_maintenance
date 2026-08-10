@@ -50,7 +50,7 @@ class HomeMaintenanceData:
     store: TaskStore
     notifications: NotificationManager | None = None
     unsub_watchers: list[CALLBACK_TYPE] = field(default_factory=list)
-    watched_entities: frozenset[str] = frozenset()
+    watcher_signature: frozenset[tuple[str, str, str]] = frozenset()
 
 
 type HomeMaintenanceConfigEntry = ConfigEntry[HomeMaintenanceData]
@@ -69,15 +69,11 @@ async def async_setup_entry(
     task_store = TaskStore(hass)
     await task_store.async_load()
 
-    # Register Device
+    # Register Device (shared identity, defined once in const.device_info)
     device_registry = dr.async_get(hass)
     device_registry.async_get_or_create(
         config_entry_id=entry.entry_id,
-        identifiers={(const.DOMAIN, const.DEVICE_KEY)},
-        name=const.NAME,
-        model=const.NAME,
-        sw_version=const.VERSION,
-        manufacturer=const.MANUFACTURER,
+        **const.device_info(),
     )
 
     data = HomeMaintenanceData(store=task_store)
@@ -106,6 +102,11 @@ async def async_setup_entry(
     def handle_tag_scanned_event(event: Event) -> None:
         """Handle when a tag is scanned."""
         tag_id = event.data.get("tag_id")  # Actually tag UUID
+        # Guard against events without a tag_id: get_by_tag_uuid would match
+        # every task whose tag entity is missing from the registry (its
+        # lookup yields None == None) and complete them all.
+        if not tag_id:
+            return
 
         tasks = task_store.get_by_tag_uuid(tag_id)
         if not tasks:
@@ -113,8 +114,9 @@ async def async_setup_entry(
 
         _LOGGER.debug("Tag scanned: %s", tag_id)
 
-        for task in tasks:
-            task_store.update_last_performed(task["id"])
+        # One physical scan → one save and one change signal, even when the
+        # tag is shared by several tasks.
+        task_store.complete_tasks([task["id"] for task in tasks])
 
     entry.async_on_unload(
         hass.bus.async_listen(EVENT_TAG_SCANNED, handle_tag_scanned_event)
@@ -126,7 +128,11 @@ async def async_setup_entry(
 
     @callback
     def handle_tasks_changed() -> None:
-        if _watched_entities(data.store) != data.watched_entities:
+        # Rebuild when the (entity, task, trigger) wiring changes — not only
+        # when the set of watched entity ids does. Two tasks can watch the
+        # same entity, or a task can be retyped while keeping its entity, and
+        # the closure-captured maps would otherwise go stale.
+        if _watcher_signature(data.store) != data.watcher_signature:
             _async_setup_watchers(hass, data)
 
     entry.async_on_unload(
@@ -152,6 +158,12 @@ async def async_unload_entry(
     if not unload_ok:
         return False
 
+    # Flush any pending delayed save before a fresh store can reload from disk
+    # (e.g. an options-save reload right after a task mutation).
+    data: HomeMaintenanceData | None = hass.data.get(const.DOMAIN)
+    if data is not None:
+        await data.store.async_flush()
+
     async_unregister_panel(hass)
     for service in (
         const.SERVICE_RESET,
@@ -167,11 +179,15 @@ async def async_unload_entry(
 
 async def async_remove_entry(
     hass: HomeAssistant,
-    entry: HomeMaintenanceConfigEntry,  # noqa: ARG001
+    entry: HomeMaintenanceConfigEntry,
 ) -> None:
-    """Remove Home Maintenance config entry."""
-    async_unregister_panel(hass)
-    hass.data.pop(const.DOMAIN, None)
+    """
+    Remove Home Maintenance config entry.
+
+    HA always calls async_unload_entry before async_remove_entry, so the
+    panel and hass.data were already cleaned up there — re-unregistering the
+    panel here would only log a spurious 'Removing unknown panel' warning.
+    """
 
 
 async def async_migrate_entry(
@@ -281,10 +297,16 @@ def register_services(hass: HomeAssistant) -> None:
     )
 
 
-def _watched_entities(store: TaskStore) -> frozenset[str]:
-    """Return the set of entity ids the tasks' triggers monitor."""
+def _watcher_signature(store: TaskStore) -> frozenset[tuple[str, str, str]]:
+    """
+    Return the (entity_id, task_id, trigger_type) tuples the watchers cover.
+
+    Comparing this set (not just the entity ids) detects task adds/removes and
+    trigger-type swaps that reuse an already-watched entity, both of which
+    must trigger a watcher rebuild.
+    """
     return frozenset(
-        entity_id
+        (entity_id, task.id, task.trigger_type)
         for task in store.tasks.values()
         if (entity_id := get_trigger(task.trigger_type).watched_entity(task))
     )
@@ -301,7 +323,7 @@ def _runtime_change_is_meaningful(
     flip or a whole-unit progress change is worth announcing.
     """
     baseline = task.runtime_baseline
-    if old_value is None or old_value < baseline:
+    if baseline is None or old_value is None or old_value < baseline:
         return True
     old_delta = old_value - baseline
     new_delta = new_value - baseline
@@ -324,7 +346,7 @@ def _async_setup_watchers(hass: HomeAssistant, data: HomeMaintenanceData) -> Non
     data.unsub_watchers.clear()
 
     store = data.store
-    data.watched_entities = _watched_entities(store)
+    data.watcher_signature = _watcher_signature(store)
 
     count_map: dict[str, list[str]] = {}
     runtime_map: dict[str, list[str]] = {}
@@ -345,10 +367,14 @@ def _async_setup_watchers(hass: HomeAssistant, data: HomeMaintenanceData) -> Non
             new_state = event.data.get("new_state")
             if old_state is None or new_state is None:
                 return
-            # Only count transitions to "on" state
-            if new_state.state != "on" or old_state.state == "on":
+            # Only count genuine off->on transitions. Excluding old_state 'on'
+            # is not enough: unavailable/unknown -> on happens on every
+            # reconnect or reload and must not be counted as an activation.
+            if new_state.state != "on" or old_state.state != "off":
                 return
             for task_id in count_map.get(event.data["entity_id"], []):
+                if task_id not in store.tasks:
+                    continue
                 _LOGGER.debug("Count increment for task %s", task_id)
                 store.increment_count(task_id)
 
@@ -378,13 +404,22 @@ def _async_setup_watchers(hass: HomeAssistant, data: HomeMaintenanceData) -> Non
                 task = store.tasks.get(task_id)
                 if task is None:
                     continue
-                if value < task.runtime_baseline:
-                    # External sensor reset — persist a fresh baseline
-                    _LOGGER.debug("Runtime reset detected for task %s", task_id)
-                    store.update_runtime_baseline(task_id, 0)
+                if task.runtime_baseline is None:
+                    # Baseline was pending (sensor unavailable at create/
+                    # complete time) — capture it from this first reading.
+                    # update_runtime_baseline fires the change signals itself.
+                    _LOGGER.debug("Capturing runtime baseline for task %s", task_id)
+                    store.update_runtime_baseline(task_id, value)
                 elif _runtime_change_is_meaningful(task, old_value, value):
-                    # Push the new delta to the entity and panel
-                    async_dispatcher_send(hass, const.SIGNAL_TASK_UPDATED, task_id)
+                    # A dip below the baseline is tolerated transiently by
+                    # trigger.delta (treated as baseline 0) without rewriting
+                    # stored state, so a momentary glitch can't permanently
+                    # convert the sensor's lifetime total into runtime.
+                    # Notify the entity (TASK_UPDATED) and any open panel,
+                    # whose websocket subscription only listens to
+                    # TASKS_CHANGED (coalesced client-side by its debouncer).
+                    async_dispatcher_send(hass, const.signal_task_updated(task_id))
+                    async_dispatcher_send(hass, const.SIGNAL_TASKS_CHANGED)
 
         data.unsub_watchers.append(
             async_track_state_change_event(

@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING, Any
 from dateutil.relativedelta import relativedelta
 from homeassistant.util import dt as dt_util
 
+from .datetime_utils import parse_local_datetime
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from datetime import datetime
@@ -49,23 +51,25 @@ class TimeTrigger:
         self, hass: HomeAssistant, task: HomeMaintenanceTask
     ) -> datetime | None:
         """Return the datetime the task becomes due, if computable."""
-        last = (
-            dt_util.parse_datetime(task.last_performed) if task.last_performed else None
-        )
+        last = parse_local_datetime(task.last_performed)
         if last is None:
             return None
-        if last.tzinfo is None:
-            last = dt_util.as_utc(last)
 
+        # Add the interval to the local calendar *date*, then rebuild local
+        # midnight for the resulting date. Doing the arithmetic on the date
+        # (not the aware datetime) means a DST transition inside the interval
+        # can't push the due moment onto the neighboring day.
+        last_date = last.date()
         if task.interval_type == "days":
-            due = last + timedelta(days=task.interval_value)
+            due_date = last_date + timedelta(days=task.interval_value)
         elif task.interval_type == "weeks":
-            due = last + timedelta(weeks=task.interval_value)
+            due_date = last_date + timedelta(weeks=task.interval_value)
         elif task.interval_type == "months":
-            due = last + relativedelta(months=task.interval_value)
+            due_date = last_date + relativedelta(months=task.interval_value)
         else:
-            due = last
-        return dt_util.start_of_local_day(dt_util.as_local(due))
+            due_date = last_date
+        # start_of_local_day accepts a date and returns local midnight for it.
+        return dt_util.start_of_local_day(due_date)
 
     def is_due(self, hass: HomeAssistant, task: HomeMaintenanceTask) -> bool:
         """Return whether the task is currently due."""
@@ -172,7 +176,8 @@ class RuntimeTrigger(TimeTrigger):
     def delta(self, hass: HomeAssistant, task: HomeMaintenanceTask) -> float:
         """Return accumulation since baseline, tolerating external resets."""
         value = self.current_value(hass, task)
-        if value is None:
+        # A pending (None) baseline hasn't been captured yet — no progress.
+        if value is None or task.runtime_baseline is None:
             return 0
         # A value below the recorded baseline means the source sensor was
         # reset externally; treat the baseline as 0 so progress stays sane.
@@ -180,14 +185,24 @@ class RuntimeTrigger(TimeTrigger):
         return round(value - baseline, 2)
 
     def initialize(self, hass: HomeAssistant, task: HomeMaintenanceTask) -> None:
-        """Capture the sensor's current value as the baseline."""
-        task.runtime_baseline = self.current_value(hass, task) or 0.0
+        """
+        Capture the sensor's current value as the baseline.
+
+        If the sensor is unavailable, leave the baseline pending (None) so it
+        is captured from the first real reading instead of anchoring at 0 and
+        turning the sensor's whole lifetime total into accumulated runtime.
+        """
+        task.runtime_baseline = self.current_value(hass, task)
 
     def on_complete(self, hass: HomeAssistant, task: HomeMaintenanceTask) -> None:
-        """Re-baseline at the sensor's current value on completion."""
-        value = self.current_value(hass, task)
-        if value is not None:
-            task.runtime_baseline = value
+        """
+        Re-baseline at the sensor's current value on completion.
+
+        If the sensor is unavailable, leave the baseline pending rather than
+        keeping the stale one (which would pop the task straight back to due
+        when the sensor recovers).
+        """
+        task.runtime_baseline = self.current_value(hass, task)
 
     def next_due(
         self, hass: HomeAssistant, task: HomeMaintenanceTask

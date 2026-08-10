@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.event import async_track_point_in_time
 from homeassistant.util import dt as dt_util
@@ -19,6 +18,7 @@ from .triggers import get_trigger
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import CALLBACK_TYPE, HomeAssistant
+    from homeassistant.helpers.device_registry import DeviceInfo
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
     from .store import HomeMaintenanceTask, TaskStore
@@ -91,15 +91,9 @@ class HomeMaintenanceSensor(BinarySensorEntity):
         return self._store.tasks.get(self._task_id)
 
     @property
-    def device_info(self) -> DeviceInfo | None:
+    def device_info(self) -> DeviceInfo:
         """Return device information for this sensor."""
-        return DeviceInfo(
-            identifiers={(const.DOMAIN, const.DEVICE_KEY)},
-            name=const.NAME,
-            model=const.NAME,
-            sw_version=const.VERSION,
-            manufacturer=const.MANUFACTURER,
-        )
+        return const.device_info()
 
     @property
     def icon(self) -> str | None:
@@ -127,9 +121,7 @@ class HomeMaintenanceSensor(BinarySensorEntity):
         self._attr_extra_state_attributes = attributes
 
     @callback
-    def _handle_task_updated(self, task_id: str) -> None:
-        if task_id != self._task_id:
-            return
+    def _handle_task_updated(self) -> None:
         self._update_state()
         self.async_write_ha_state()
         self._schedule_due_refresh()
@@ -158,15 +150,22 @@ class HomeMaintenanceSensor(BinarySensorEntity):
     async def async_added_to_hass(self) -> None:
         """Run when entity is added to Home Assistant."""
         registry = er.async_get(self.hass)
-        if self._labels and registry.async_get(self.entity_id):
+        entry = registry.async_get(self.entity_id)
+        if self._labels and entry:
             registry.async_update_entity(self.entity_id, labels=set(self._labels))
         task = self.task
-        if task and task.area_id and registry.async_get(self.entity_id):
+        # Apply the task's area only when the entity has no area yet (initial
+        # creation). On later startups the registry already holds an area,
+        # which the user may have changed via the entity settings — do not
+        # revert that on every restart.
+        if task and task.area_id and entry and entry.area_id is None:
             registry.async_update_entity(self.entity_id, area_id=task.area_id)
 
         self.async_on_remove(
             async_dispatcher_connect(
-                self.hass, const.SIGNAL_TASK_UPDATED, self._handle_task_updated
+                self.hass,
+                const.signal_task_updated(self._task_id),
+                self._handle_task_updated,
             )
         )
         self._schedule_due_refresh()
