@@ -4,7 +4,7 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
-## Unreleased
+## 1.5.20 — 2026-08-10
 
 - Security: mutating websocket commands now require an admin user, matching
   the panel's admin-only option (a non-admin could previously add/edit/delete

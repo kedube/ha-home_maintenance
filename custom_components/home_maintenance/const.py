@@ -5,7 +5,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.device_registry import DeviceInfo
 
-VERSION = "1.5.19"
+VERSION = "1.5.20"
 NAME = "Home Maintenance"
 MANUFACTURER = "@TJPoorman"
 
