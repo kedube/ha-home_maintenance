@@ -4,7 +4,7 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
-## Unreleased
+## 1.5.21 — 2026-08-10
 
 - Fixed (regression in 1.5.20): existing installs could get stuck on
   "Initializing" after upgrading, because the config-entry version changed
