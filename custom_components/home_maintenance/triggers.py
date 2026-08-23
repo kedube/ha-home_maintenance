@@ -1,10 +1,10 @@
 """
 Trigger-type strategies for Home Maintenance tasks.
 
-Each task has a trigger type (time, count, or runtime) that controls when the
-task becomes due, what progress it reports, and what completing it means. All
-of that per-type logic lives here so the store, the entities, and the
-websocket API share a single implementation.
+Each task has a trigger type (time, date, count, or runtime) that controls
+when the task becomes due, what progress it reports, and what completing it
+means. All of that per-type logic lives here so the store, the entities, and
+the websocket API share a single implementation.
 """
 
 from __future__ import annotations
@@ -18,14 +18,78 @@ from homeassistant.util import dt as dt_util
 from .datetime_utils import parse_local_datetime
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
-    from datetime import datetime
+    from collections.abc import Callable, Mapping
+    from datetime import date, datetime
 
     from homeassistant.core import HomeAssistant
 
     from .store import HomeMaintenanceTask
 
 UNAVAILABLE_STATES = ("unknown", "unavailable")
+
+# Hard cap on projection loop steps. It bounds the fast-forward over the
+# skipped past repetitions of a badly overdue task (~13 years of a daily
+# task) without letting a corrupt interval spin forever.
+_MAX_PROJECTION_STEPS = 5000
+
+
+def _parse_anchor(value: str | None) -> date | None:
+    """Parse a stored anchor into a calendar date, tolerating datetimes."""
+    if not value:
+        return None
+    return dt_util.parse_date(str(value).split("T")[0])
+
+
+def _project_future(
+    occurrence_at: Callable[[int], date],
+    horizon: datetime,
+    limit: int,
+) -> list[datetime]:
+    """
+    Shared projection loop for dated triggers.
+
+    Always includes the k=0 occurrence — the real next due date, even when it
+    lies in the past (an overdue task) or beyond the horizon. Repetitions
+    assume the task is completed on each due date, so a repetition landing in
+    the past (a badly overdue task) is meaningless: it is skipped without
+    consuming the limit, and the step cap bounds that fast-forward.
+    """
+    first = dt_util.start_of_local_day(occurrence_at(0))
+    today = dt_util.start_of_local_day()
+    occurrences = [first]
+    previous = first
+    for k in range(1, _MAX_PROJECTION_STEPS):
+        occurrence = dt_util.start_of_local_day(occurrence_at(k))
+        # Stop on a non-advancing (zero-length) interval, defensively.
+        if occurrence <= previous:
+            break
+        previous = occurrence
+        if occurrence > horizon:
+            break
+        if occurrence > today:
+            occurrences.append(occurrence)
+            if len(occurrences) >= max(limit, 1):
+                break
+    return occurrences
+
+
+def _interval_offset(
+    interval_type: str, interval_value: int, k: int
+) -> timedelta | relativedelta:
+    """
+    Return the offset of k whole intervals.
+
+    Month/year offsets multiply inside a single relativedelta instead of being
+    added repeatedly, so a Jan 31 anchor doesn't drift to the 28th forever
+    after passing one February.
+    """
+    if interval_type == "weeks":
+        return timedelta(weeks=interval_value * k)
+    if interval_type == "months":
+        return relativedelta(months=interval_value * k)
+    if interval_type == "years":
+        return relativedelta(years=interval_value * k)
+    return timedelta(days=interval_value * k)
 
 
 class TimeTrigger:
@@ -59,15 +123,9 @@ class TimeTrigger:
         # midnight for the resulting date. Doing the arithmetic on the date
         # (not the aware datetime) means a DST transition inside the interval
         # can't push the due moment onto the neighboring day.
-        last_date = last.date()
-        if task.interval_type == "days":
-            due_date = last_date + timedelta(days=task.interval_value)
-        elif task.interval_type == "weeks":
-            due_date = last_date + timedelta(weeks=task.interval_value)
-        elif task.interval_type == "months":
-            due_date = last_date + relativedelta(months=task.interval_value)
-        else:
-            due_date = last_date
+        due_date = last.date() + _interval_offset(
+            task.interval_type, task.interval_value, 1
+        )
         # start_of_local_day accepts a date and returns local midnight for it.
         return dt_util.start_of_local_day(due_date)
 
@@ -77,6 +135,32 @@ class TimeTrigger:
         if due is None:
             return True
         return dt_util.start_of_local_day() >= due
+
+    def upcoming(
+        self,
+        hass: HomeAssistant,
+        task: HomeMaintenanceTask,
+        horizon: datetime,
+        limit: int,
+    ) -> list[datetime]:
+        """
+        Project due moments: next_due plus future repetitions in the horizon.
+
+        See _project_future for the shared semantics (overdue first
+        occurrence kept, past repetitions skipped).
+        """
+        first = self.next_due(hass, task)
+        if first is None:
+            return []
+        first_date = dt_util.as_local(first).date()
+        return _project_future(
+            lambda k: (
+                first_date
+                + _interval_offset(task.interval_type, task.interval_value, k)
+            ),
+            horizon,
+            limit,
+        )
 
     def progress(
         self, hass: HomeAssistant, task: HomeMaintenanceTask
@@ -91,6 +175,105 @@ class TimeTrigger:
             "interval_value": task.interval_value,
             "interval_type": task.interval_type,
             "next_due": due.isoformat() if due else "unknown",
+        }
+
+
+class DateTrigger(TimeTrigger):
+    """
+    Due on fixed calendar dates: an anchor date plus interval repetitions.
+
+    Unlike the time trigger, the schedule never shifts: occurrences fall on
+    anchor + k * interval regardless of when the task was last completed.
+    The next due date is the first occurrence strictly after the last
+    completion, so an overdue occurrence stays due until completed after it.
+    """
+
+    type = "date"
+
+    def validate(self, fields: Mapping[str, Any]) -> str | None:
+        """Return an error message when required trigger fields are missing."""
+        if _parse_anchor(fields.get("anchor_date")) is None:
+            return "date tasks require a valid anchor_date"
+        if (fields.get("interval_value") or 0) <= 0:
+            return "date tasks require a positive interval_value"
+        return None
+
+    def _anchor(self, task: HomeMaintenanceTask) -> date | None:
+        """Return the anchor as a calendar date, or None when unparseable."""
+        return _parse_anchor(task.anchor_date)
+
+    def _next_index(self, task: HomeMaintenanceTask) -> int | None:
+        """Return k of the first occurrence strictly after the last completion."""
+        anchor = self._anchor(task)
+        if anchor is None:
+            return None
+        last = parse_local_datetime(task.last_performed)
+        if last is None or last.date() < anchor:
+            return 0
+        last_date = last.date()
+        interval = max(task.interval_value, 1)
+        # Land at (or just below) the target analytically, then step the last
+        # bit — keeps this O(1)-ish even for a daily anchor set years ago.
+        if task.interval_type == "weeks":
+            k = (last_date - anchor).days // (7 * interval)
+        elif task.interval_type == "months":
+            months = (last_date.year - anchor.year) * 12 + (
+                last_date.month - anchor.month
+            )
+            k = max(months // interval - 1, 0)
+        elif task.interval_type == "years":
+            k = max((last_date.year - anchor.year) // interval - 1, 0)
+        else:
+            k = (last_date - anchor).days // interval
+        while (anchor + _interval_offset(task.interval_type, interval, k)) <= last_date:
+            k += 1
+        return k
+
+    def next_due(
+        self, hass: HomeAssistant, task: HomeMaintenanceTask
+    ) -> datetime | None:
+        """Return the next fixed occurrence after the last completion."""
+        k = self._next_index(task)
+        anchor = self._anchor(task)
+        if k is None or anchor is None:
+            return None
+        interval = max(task.interval_value, 1)
+        return dt_util.start_of_local_day(
+            anchor + _interval_offset(task.interval_type, interval, k)
+        )
+
+    def upcoming(
+        self,
+        hass: HomeAssistant,
+        task: HomeMaintenanceTask,
+        horizon: datetime,
+        limit: int,
+    ) -> list[datetime]:
+        """
+        Project fixed occurrences from the next due date onward.
+
+        Uses the shared _project_future semantics; occurrences stay indexed
+        from the anchor (not re-added from the previous occurrence), so
+        month-end anchors never drift.
+        """
+        next_index = self._next_index(task)
+        anchor = self._anchor(task)
+        if next_index is None or anchor is None:
+            return []
+        interval = max(task.interval_value, 1)
+        return _project_future(
+            lambda k: (
+                anchor + _interval_offset(task.interval_type, interval, next_index + k)
+            ),
+            horizon,
+            limit,
+        )
+
+    def extra_attributes(self, hass: HomeAssistant, task: HomeMaintenanceTask) -> dict:
+        """Return trigger-specific entity attributes."""
+        return {
+            **super().extra_attributes(hass, task),
+            "anchor_date": task.anchor_date,
         }
 
 
@@ -238,7 +421,7 @@ class RuntimeTrigger(TimeTrigger):
 
 TRIGGERS: dict[str, TimeTrigger] = {
     trigger.type: trigger
-    for trigger in (TimeTrigger(), CountTrigger(), RuntimeTrigger())
+    for trigger in (TimeTrigger(), DateTrigger(), CountTrigger(), RuntimeTrigger())
 }
 
 

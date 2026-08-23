@@ -13,6 +13,7 @@ from homeassistant.helpers.event import async_track_point_in_time
 from homeassistant.util import dt as dt_util
 
 from . import const
+from .store import task_event_data
 from .triggers import get_trigger
 
 if TYPE_CHECKING:
@@ -120,10 +121,27 @@ class HomeMaintenanceSensor(BinarySensorEntity):
             attributes["tag_id"] = task.tag_id
         self._attr_extra_state_attributes = attributes
 
+    def _fire_due_event(self) -> None:
+        """Announce the task turning due, for event-triggered automations."""
+        task = self.task
+        if task is None:
+            return
+        self.hass.bus.async_fire(
+            const.EVENT_TASK_DUE, task_event_data(task, self.entity_id)
+        )
+
     @callback
-    def _handle_task_updated(self) -> None:
+    def _refresh_state(self) -> None:
+        """Recompute and publish state, announcing a not-due → due flip."""
+        was_due = bool(self._attr_is_on)
         self._update_state()
         self.async_write_ha_state()
+        if not was_due and self._attr_is_on:
+            self._fire_due_event()
+
+    @callback
+    def _handle_task_updated(self) -> None:
+        self._refresh_state()
         self._schedule_due_refresh()
 
     def _schedule_due_refresh(self) -> None:
@@ -142,8 +160,7 @@ class HomeMaintenanceSensor(BinarySensorEntity):
         @callback
         def _refresh(_now: object) -> None:
             self._due_timer = None
-            self._update_state()
-            self.async_write_ha_state()
+            self._refresh_state()
 
         self._due_timer = async_track_point_in_time(self.hass, _refresh, due)
 

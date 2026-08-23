@@ -1,0 +1,38 @@
+{
+  "config": {
+    "flow_title": "Home Maintenance",
+    "step": {
+      "user": {
+        "title": "Configurer Home Maintenance",
+        "description": "Configurez l'intégration Home Maintenance.",
+        "data": {
+          "admin_only": "Restreindre le panneau aux administrateurs uniquement",
+          "sidebar_title": "Le nom affiché dans la barre latérale pour cette intégration."
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Une seule instance de Home Maintenance est autorisée."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "admin_only": "Restreindre le panneau aux administrateurs uniquement",
+          "sidebar_title": "Le nom affiché dans la barre latérale pour cette intégration."
+        }
+      }
+    }
+  },
+  "issues": {
+    "missing_watched_entity": {
+      "title": "L'entité surveillée pour \"{title}\" est introuvable",
+      "description": "La tâche de maintenance \"{title}\" surveille `{entity_id}`, mais cette entité n'existe plus. Le compteur ou la progression de fonctionnement de la tâche n'avancera pas tant que l'entité ne sera pas de retour ou que la tâche ne sera pas mise à jour pour surveiller une autre entité."
+    },
+    "missing_notify_service": {
+      "title": "Le service de notification pour \"{title}\" est introuvable",
+      "description": "La tâche de maintenance \"{title}\" envoie des notifications via `{service}`, mais ce service n'est pas disponible. Les notifications pour cette tâche échoueront tant que le service ne sera pas de retour ou que la tâche ne sera pas mise à jour pour utiliser un autre service de notification."
+    }
+  }
+}

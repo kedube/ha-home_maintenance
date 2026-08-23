@@ -4,6 +4,38 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
+## Unreleased
+
+- Added: a `todo.home_maintenance` todo list entity mirroring the tasks —
+  due tasks are pending, checking one off completes it, and renaming or
+  editing an item's description updates the task. Works with the native todo
+  card, the companion-app widgets, and voice assistants.
+- Added: a new **Fixed date** trigger type for seasonal tasks ("every year
+  on October 1"): pick an anchor date and a repeat interval, and the
+  schedule stays anchored to the calendar no matter when the task is
+  completed. A **years** interval unit is also available for both time-based
+  and fixed-date tasks.
+- Added: completion history. Every completion is recorded per task (date,
+  actual completion time, optional note) — the panel's complete dialog and
+  `reset_last_performed`/`complete_task` accept a note, the edit dialog and
+  todo card show recent entries, and history is capped at 50 entries.
+- Added: the calendar now projects future recurrences (up to a year ahead)
+  for time-based and fixed-date tasks instead of showing only the next due
+  date.
+- Added: `home_maintenance_task_completed` and `home_maintenance_task_due`
+  bus events for event-triggered automations, fired on every completion and
+  whenever a task's entity flips to due.
+- Added: Repairs issues when a count/runtime task's watched entity no longer
+  exists or a task's notify service is missing, clearing automatically once
+  the reference is valid again.
+- Added: config entry diagnostics (Settings → Devices & Services →
+  Home Maintenance → Download diagnostics) with free-text fields redacted.
+- Added: French, Spanish, Italian, Dutch, Polish, and Brazilian Portuguese
+  translations for the panel, the cards, and the config flow; the todo
+  card's remaining hard-coded strings are now localized.
+- Added: frontend unit tests (vitest) covering the panel's date math,
+  bucketing, form validation, and translation completeness, wired into CI.
+
 ## 1.5.21 — 2026-08-10
 
 - Fixed (regression in 1.5.20): existing installs could get stuck on

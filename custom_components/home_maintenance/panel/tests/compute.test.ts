@@ -1,0 +1,178 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import {
+    Debouncer,
+    computeTaskSchedule,
+    formatDaysLabel,
+    formatProgress,
+    formatTimeInterval,
+    formatTriggerInterval,
+    isDatedTrigger,
+    parseStoredDate,
+} from '../src/compute';
+import type { Task } from '../src/types';
+
+const baseTask = (overrides: Partial<Task> = {}): Task => ({
+    id: 'home_maintenance_test',
+    title: 'Test Task',
+    interval_value: 30,
+    interval_type: 'days',
+    last_performed: '2026-08-01T00:00:00-07:00',
+    trigger_type: 'time',
+    due: false,
+    next_due: '2026-08-31T00:00:00-07:00',
+    ...overrides,
+});
+
+// Local midnight of a fixed "today" used across the schedule tests.
+const TODAY = new Date(2026, 7, 21); // 2026-08-21
+
+describe('parseStoredDate', () => {
+    it('parses the calendar date, ignoring time and offset', () => {
+        const parsed = parseStoredDate('2026-08-31T00:00:00-07:00');
+        expect(parsed.getFullYear()).toBe(2026);
+        expect(parsed.getMonth()).toBe(7);
+        expect(parsed.getDate()).toBe(31);
+        expect(parsed.getHours()).toBe(0);
+    });
+
+    it('accepts a bare date string', () => {
+        expect(parseStoredDate('2026-01-05').getDate()).toBe(5);
+    });
+});
+
+describe('isDatedTrigger', () => {
+    it('treats time, date, and missing trigger types as dated', () => {
+        expect(isDatedTrigger(baseTask())).toBe(true);
+        expect(isDatedTrigger(baseTask({ trigger_type: 'date' }))).toBe(true);
+        expect(isDatedTrigger(baseTask({ trigger_type: undefined }))).toBe(true);
+        expect(isDatedTrigger(baseTask({ trigger_type: 'count' }))).toBe(false);
+        expect(isDatedTrigger(baseTask({ trigger_type: 'runtime' }))).toBe(false);
+    });
+});
+
+describe('computeTaskSchedule', () => {
+    it('buckets a backend-due task as overdue', () => {
+        const schedule = computeTaskSchedule(baseTask({ due: true }), 14, TODAY);
+        expect(schedule.status).toBe('overdue');
+    });
+
+    it('buckets a task inside the due-soon window', () => {
+        const schedule = computeTaskSchedule(baseTask(), 14, TODAY);
+        expect(schedule.daysUntilDue).toBe(10);
+        expect(schedule.status).toBe('due_soon');
+    });
+
+    it('buckets a far-out task as upcoming', () => {
+        const schedule = computeTaskSchedule(baseTask(), 5, TODAY);
+        expect(schedule.status).toBe('upcoming');
+    });
+
+    it('treats a fixed-date task like a dated task', () => {
+        const schedule = computeTaskSchedule(
+            baseTask({ trigger_type: 'date', next_due: '2026-08-22T00:00:00-07:00' }),
+            14,
+            TODAY,
+        );
+        expect(schedule.daysUntilDue).toBe(1);
+        expect(schedule.status).toBe('due_soon');
+        expect(schedule.nextDue?.getDate()).toBe(22);
+    });
+
+    it('gives count/runtime tasks no dates', () => {
+        const schedule = computeTaskSchedule(
+            baseTask({ trigger_type: 'count', next_due: null }),
+            14,
+            TODAY,
+        );
+        expect(schedule.nextDue).toBeNull();
+        expect(schedule.daysUntilDue).toBeNull();
+        expect(schedule.status).toBe('upcoming');
+    });
+
+    it('detects a completion today', () => {
+        const schedule = computeTaskSchedule(
+            baseTask({ last_performed: '2026-08-21T00:00:00-07:00' }),
+            14,
+            TODAY,
+        );
+        expect(schedule.completedToday).toBe(true);
+    });
+
+    it('counts days correctly across a DST fall-back transition', () => {
+        // US DST ends Nov 1 2026: the Oct 31 -> Nov 3 span is 73 hours, and
+        // ceil(73/24) would report 4 days for a task due in 3.
+        const schedule = computeTaskSchedule(
+            baseTask({ next_due: '2026-11-03T00:00:00-08:00' }),
+            14,
+            new Date(2026, 9, 31),
+        );
+        expect(schedule.daysUntilDue).toBe(3);
+    });
+});
+
+describe('format helpers', () => {
+    it('formats progress for count/runtime tasks', () => {
+        expect(formatProgress(baseTask({ progress_current: 3, progress_target: 10 }))).toBe('3 / 10');
+        expect(formatProgress(baseTask())).toBe('0 / 0');
+    });
+
+    it('formats time intervals with singular/plural keys', () => {
+        expect(formatTimeInterval(1, 'weeks', 'en')).toBe('1 Week');
+        expect(formatTimeInterval(3, 'months', 'en')).toBe('3 Months');
+        expect(formatTimeInterval(1, 'years', 'en')).toBe('1 Year');
+    });
+
+    it('formats trigger-aware intervals', () => {
+        expect(formatTriggerInterval(baseTask(), 'en')).toBe('30 Days');
+        expect(formatTriggerInterval(baseTask({ trigger_type: 'date', interval_value: 1, interval_type: 'years' }), 'en')).toBe('1 Year');
+        expect(formatTriggerInterval(baseTask({ trigger_type: 'count', count_threshold: 60 }), 'en')).toBe('Every 60 uses');
+        expect(formatTriggerInterval(baseTask({ trigger_type: 'runtime', runtime_threshold: 50 }), 'en')).toBe('Every 50 runtime');
+    });
+
+    it('formats the due-days label including plurals', () => {
+        const label = (next_due: string, due = false) =>
+            formatDaysLabel(
+                computeTaskSchedule(baseTask({ next_due, due }), 14, TODAY),
+                baseTask({ next_due, due }),
+                'en',
+            );
+        expect(label('2026-08-21T00:00:00-07:00')).toBe('Due today');
+        expect(label('2026-08-22T00:00:00-07:00')).toBe('Due in 1 day');
+        expect(label('2026-08-26T00:00:00-07:00')).toBe('5 days left');
+        expect(label('2026-08-20T00:00:00-07:00', true)).toBe('1 day overdue');
+        expect(label('2026-08-11T00:00:00-07:00', true)).toBe('10 days overdue');
+    });
+
+    it('falls back to progress for undated tasks', () => {
+        const task = baseTask({ trigger_type: 'count', next_due: null, progress_current: 2, progress_target: 5 });
+        expect(formatDaysLabel(computeTaskSchedule(task, 14, TODAY), task, 'en')).toBe('2 / 5');
+    });
+});
+
+describe('Debouncer', () => {
+    it('coalesces rapid schedules into one trailing call', () => {
+        vi.useFakeTimers();
+        const fn = vi.fn();
+        const debouncer = new Debouncer(fn, 300);
+        debouncer.schedule();
+        debouncer.schedule();
+        debouncer.schedule();
+        vi.advanceTimersByTime(299);
+        expect(fn).not.toHaveBeenCalled();
+        vi.advanceTimersByTime(1);
+        expect(fn).toHaveBeenCalledTimes(1);
+        vi.useRealTimers();
+    });
+
+    it('cancel stops a pending call', () => {
+        vi.useFakeTimers();
+        const fn = vi.fn();
+        const debouncer = new Debouncer(fn, 300);
+        debouncer.schedule();
+        debouncer.cancel();
+        vi.advanceTimersByTime(1000);
+        expect(fn).not.toHaveBeenCalled();
+        vi.useRealTimers();
+    });
+});

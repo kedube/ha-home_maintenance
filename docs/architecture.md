@@ -34,22 +34,27 @@ Owns the `HomeMaintenanceTask` attrs objects, persists them with HA's `Store` he
 | `SIGNAL_TASK_REMOVED` | `(task_id,)` | task deleted |
 | `SIGNAL_TASKS_CHANGED` | — | catch-all, after any of the above |
 
-`update_task` applies only fields in `ALLOWED_UPDATE_FIELDS` — managed fields (`id`, `current_count`, `runtime_baseline`) cannot be set through the API. (`labels` is deliberately not in the whitelist: labels live in the entity registry, and `update_task` applies them there instead.) Both `add` and `update_task` run the trigger's `validate` before mutating anything, so no write path can produce a task whose trigger can never fire (e.g. a count task without an entity). Switching a task's `trigger_type` re-runs the new trigger's `initialize` (counter reset / baseline capture). `rename_group` refuses to rename onto an existing group rather than silently merging the two. Storage loads tolerate data written by other versions: unknown task fields are dropped, missing ones fall back to the attrs defaults, and a migrate hook accepts old major/minor layouts. Failures raise `RuntimeError`, which the websocket layer maps to clean API errors.
+`update_task` applies only fields in `ALLOWED_UPDATE_FIELDS` — managed fields (`id`, `current_count`, `runtime_baseline`, `history`) cannot be set through the API. (`labels` is deliberately not in the whitelist: labels live in the entity registry, and `update_task` applies them there instead.) Both `add` and `update_task` run the trigger's `validate` before mutating anything, so no write path can produce a task whose trigger can never fire (e.g. a count task without an entity). Switching a task's `trigger_type` re-runs the new trigger's `initialize` (counter reset / baseline capture). `rename_group` refuses to rename onto an existing group rather than silently merging the two. Storage loads tolerate data written by other versions: unknown task fields are dropped, missing ones fall back to the attrs defaults, and a migrate hook accepts old major/minor layouts. Failures raise `RuntimeError`, which the websocket layer maps to clean API errors.
 
 `serialize(task)` extends the raw task dict with computed trigger state — `due`, `next_due`, `progress_current`, `progress_target` — which is what the websocket API returns. The panel renders these values and never reimplements trigger semantics.
 
+Every completion path funnels through `_apply_completion`, which also appends a capped completion-history entry (`performed`, `recorded_at`, optional `note`) and is followed by a `home_maintenance_task_completed` bus event; `binary_sensor.py` fires `home_maintenance_task_due` when an entity's state flips to due.
+
 ### `triggers.py` — trigger strategies
 
-All per-trigger-type behavior lives here, one strategy class per type (`time`, `count`, `runtime`), sharing a uniform interface:
+All per-trigger-type behavior lives here, one strategy class per type (`time`, `date`, `count`, `runtime`), sharing a uniform interface:
 
 | Method | Responsibility |
 | --- | --- |
 | `is_due` / `next_due` / `progress` | when the task is due and how close it is |
+| `upcoming` | future due-date projection (used by the calendar) |
 | `validate` | required trigger fields, enforced by the store on add and update |
 | `initialize` | state setup on create or trigger-type switch |
 | `on_complete` | effects of completing (reset counter, re-baseline) |
 | `watched_entity` | which entity the trigger monitors, if any |
 | `extra_attributes` | trigger-specific entity attributes |
+
+The `date` trigger anchors occurrences to `anchor_date + k * interval` and never shifts them: `next_due` is the first occurrence strictly after the last completion, located analytically (not by looping day by day) so a daily anchor set years ago stays O(1)-ish.
 
 Day-boundary math (a task is due on a calendar day, not at an instant) goes through `dt_util.start_of_local_day` everywhere — store, triggers, and the websocket layer share the same flooring.
 
@@ -65,7 +70,15 @@ Entities are thin views over the store's task objects (`_attr_should_poll = Fals
 
 Count/runtime tasks are served by **targeted** state listeners: `async_track_state_change_event` subscribed to exactly the entity ids the triggers report via `watched_entity`, rebuilt (via `SIGNAL_TASKS_CHANGED`) only when the watched set actually changes. The count watcher increments on `off → on` transitions; the runtime watcher persists a baseline reset when the sensor's value drops below the recorded baseline, and pushes a `SIGNAL_TASK_UPDATED` only when the change is worth announcing — a due-state flip or a whole-unit progress change — so a sensor ticking every few seconds doesn't rewrite entity state and reload every open panel on each tick.
 
-Services (`reset_last_performed`, `increment_count`, `reset_count`) resolve the target task id through the entity registry and delegate to the store; they are deregistered again when the entry unloads.
+Services (`reset_last_performed`, `increment_count`, `reset_count`, `snooze_task`, `send_task_notification`) resolve the target task id through the entity registry and delegate to the store; they are deregistered again when the entry unloads.
+
+### Other backend modules
+
+- `calendar.py` — one calendar entity; per dated task it renders the trigger's `upcoming` projection (next due date + recurrences up to a one-year horizon, capped per task), cached until a task change invalidates it. The first event keeps the task id as uid; projections get per-date uids.
+- `todo.py` — one todo list entity mirroring the store (due → `needs_action`); checking an item off completes through the store, summary/description edits map to `update_task`, and reopening is rejected because due state is computed, not stored.
+- `repairs.py` — keeps Repairs issues in sync for missing watched entities and missing notify services; re-checks on task changes, HA start, notify service (de)registration, and the flagged entities' first state.
+- `diagnostics.py` — config entry diagnostics with free-text fields (descriptions, notes, URLs, tag ids) redacted.
+- `notifications.py` — the per-task notification manager (send-time gates, once-per-day bookkeeping, mobile action handling).
 
 ### `websocket.py` — API
 

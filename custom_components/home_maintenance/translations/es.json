@@ -1,0 +1,38 @@
+{
+  "config": {
+    "flow_title": "Home Maintenance",
+    "step": {
+      "user": {
+        "title": "Configurar Home Maintenance",
+        "description": "Configura la integración Home Maintenance.",
+        "data": {
+          "admin_only": "Restringir el panel solo a administradores",
+          "sidebar_title": "El nombre que se muestra en la barra lateral para esta integración."
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Solo se permite una única instancia de Home Maintenance."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "admin_only": "Restringir el panel solo a administradores",
+          "sidebar_title": "El nombre que se muestra en la barra lateral para esta integración."
+        }
+      }
+    }
+  },
+  "issues": {
+    "missing_watched_entity": {
+      "title": "Falta la entidad vigilada para \"{title}\"",
+      "description": "La tarea de mantenimiento \"{title}\" vigila `{entity_id}`, pero esa entidad ya no existe. El contador o el progreso de tiempo de funcionamiento de la tarea no avanzará hasta que la entidad vuelva a existir o la tarea se actualice para vigilar otra entidad."
+    },
+    "missing_notify_service": {
+      "title": "Falta el servicio de notificación para \"{title}\"",
+      "description": "La tarea de mantenimiento \"{title}\" envía notificaciones a través de `{service}`, pero ese servicio no está disponible. Las notificaciones de esta tarea fallarán hasta que el servicio vuelva a estar disponible o la tarea se actualice para usar otro servicio de notificación."
+    }
+  }
+}

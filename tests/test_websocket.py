@@ -575,3 +575,47 @@ async def test_update_watched_entity_rebaselines(
     # Baseline re-captured from sensor.b (5000), so not instantly due.
     assert task["runtime_baseline"] == 5000
     assert task["due"] is False
+
+
+async def test_add_date_task_defaults_to_anchor_pending(
+    hass, setup_entry, hass_ws_client
+) -> None:
+    """A date task with a past anchor and no last_performed is due now."""
+    from datetime import timedelta
+
+    from homeassistant.util import dt as dt_util
+
+    anchor = (dt_util.now() - timedelta(days=10)).date()
+    client = await hass_ws_client(hass)
+    task_id = await add_task_via_ws(
+        client,
+        title="Winterize Sprinklers",
+        trigger_type="date",
+        anchor_date=anchor.isoformat(),
+        interval_value=1,
+        interval_type="years",
+    )
+
+    await client.send_json_auto_id(
+        {"type": "home_maintenance/get_task", "task_id": task_id}
+    )
+    response = await client.receive_json()
+    task = response["result"]
+    assert task["due"] is True
+    assert task["next_due"].startswith(anchor.isoformat())
+    # An explicit last_performed still wins (checked via a future anchor).
+    future = (dt_util.now() + timedelta(days=30)).date()
+    other_id = await add_task_via_ws(
+        client,
+        title="Explicit",
+        trigger_type="date",
+        anchor_date=future.isoformat(),
+        interval_value=1,
+        interval_type="years",
+        last_performed=dt_util.now().isoformat(),
+    )
+    await client.send_json_auto_id(
+        {"type": "home_maintenance/get_task", "task_id": other_id}
+    )
+    response = await client.receive_json()
+    assert response["result"]["due"] is False

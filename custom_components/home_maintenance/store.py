@@ -17,7 +17,7 @@ _LOGGER = logging.getLogger(__name__)
 
 STORAGE_KEY = f"{const.DOMAIN}.storage"
 STORAGE_VERSION_MAJOR = 1
-STORAGE_VERSION_MINOR = 4
+STORAGE_VERSION_MINOR = 5
 SAVE_DELAY = 1.0
 
 # ALLOWED_UPDATE_FIELDS (the fields a websocket update may modify) is derived
@@ -45,6 +45,8 @@ class HomeMaintenanceTask:
     interval_value: int = attr.ib()
     interval_type: str = attr.ib()
     last_performed: str = attr.ib()
+    # Fixed calendar date the "date" trigger's schedule is anchored to.
+    anchor_date: str | None = attr.ib(default=None)
     tag_id: str | None = attr.ib(default=None)
     icon: str | None = attr.ib(default=None)
     trigger_type: str = attr.ib(default="time")
@@ -69,6 +71,25 @@ class HomeMaintenanceTask:
     snooze_until: str | None = attr.ib(default=None)
     last_notification_kind: str | None = attr.ib(default=None)
     last_notification_date: str | None = attr.ib(default=None)
+    # Completion history, newest last: {"performed": "YYYY-MM-DD",
+    # "recorded_at": ISO datetime, "note": str | None}. Integration-managed —
+    # never client-writable, capped at MAX_HISTORY_ENTRIES.
+    history: list[dict] = attr.ib(factory=list)
+
+
+def task_event_data(task: HomeMaintenanceTask, entity_id: str | None) -> dict:
+    """
+    Build the base payload shared by the completed and due bus events.
+
+    One builder keeps the two events' documented common fields in lockstep.
+    """
+    return {
+        "task_id": task.id,
+        "entity_id": entity_id,
+        "title": task.title,
+        "trigger_type": task.trigger_type,
+        "group_id": task.group_id,
+    }
 
 
 def normalize_group_id(group_id: str | None) -> str | None:
@@ -154,6 +175,18 @@ class TaskStore:
                     "Skipping unloadable stored task %s", task_data.get("id")
                 )
                 continue
+            # A malformed stored history must not break completions later or
+            # crash the panel's history rendering: keep only well-formed
+            # entries (a dict with a string performed date).
+            if isinstance(task.history, list):
+                task.history = [
+                    entry
+                    for entry in task.history
+                    if isinstance(entry, dict)
+                    and isinstance(entry.get("performed"), str)
+                ]
+            else:
+                task.history = []
             self._tasks[task.id] = task
         # Groups in use by tasks always exist, even if the stored list lags.
         self._groups = {
@@ -170,15 +203,20 @@ class TaskStore:
         """Return the task objects keyed by id, without copying."""
         return self._tasks
 
-    def serialize(self, task: HomeMaintenanceTask) -> dict:
+    def serialize(
+        self, task: HomeMaintenanceTask, history_limit: int | None = None
+    ) -> dict:
         """
         Return the task as a dict extended with computed trigger state.
 
         The computed fields (`due`, `next_due`, `progress_current`,
         `progress_target`) let API consumers render trigger state without
-        reimplementing the trigger semantics.
+        reimplementing the trigger semantics. history_limit truncates the
+        completion history to the most recent N entries.
         """
         data = attr.asdict(task)
+        if history_limit is not None:
+            data["history"] = data["history"][-history_limit:]
         trigger = get_trigger(task.trigger_type)
         next_due = trigger.next_due(self.hass, task)
         progress = trigger.progress(self.hass, task)
@@ -189,8 +227,17 @@ class TaskStore:
         return data
 
     def get_all(self) -> list[dict]:
-        """Get all tasks, serialized with computed trigger state."""
-        return [self.serialize(t) for t in self._tasks.values()]
+        """
+        Get all tasks, serialized with computed trigger state.
+
+        The list payload is refetched by every open panel on every change, so
+        history is truncated here (the cards show only recent entries); the
+        single-task get() keeps the full history for the edit dialog.
+        """
+        return [
+            self.serialize(t, history_limit=const.LIST_HISTORY_ENTRIES)
+            for t in self._tasks.values()
+        ]
 
     def get(self, task_id: str) -> dict | None:
         """Get a single serialized task, or None."""
@@ -378,7 +425,7 @@ class TaskStore:
         self._notify_updated(task_id)
 
     def _apply_completion(
-        self, task_id: str, performed_date: datetime | None
+        self, task_id: str, performed_date: datetime | None, note: str | None = None
     ) -> HomeMaintenanceTask:
         """Mutate one task's completion state without saving or announcing."""
         task = self._tasks.get(task_id)
@@ -386,18 +433,45 @@ class TaskStore:
             msg = "Task not found."
             raise RuntimeError(msg)
 
-        task.last_performed = dt_util.start_of_local_day(
+        performed = dt_util.start_of_local_day(
             dt_util.as_local(performed_date) if performed_date is not None else None
-        ).isoformat()
+        )
+        task.last_performed = performed.isoformat()
         get_trigger(task.trigger_type).on_complete(self.hass, task)
+        # recorded_at keeps the actual completion moment distinguishable from
+        # a back-dated performed date.
+        task.history.append(
+            {
+                "performed": performed.date().isoformat(),
+                "recorded_at": dt_util.now().isoformat(),
+                "note": note or None,
+            }
+        )
+        del task.history[: -const.MAX_HISTORY_ENTRIES]
         return task
 
+    def _fire_completed_event(self, task: HomeMaintenanceTask) -> None:
+        """Announce a completion on the event bus for automations."""
+        entry = task.history[-1] if task.history else {}
+        self.hass.bus.async_fire(
+            const.EVENT_TASK_COMPLETED,
+            {
+                **task_event_data(task, self._entity_id_for(task.id)),
+                "performed": entry.get("performed"),
+                "note": entry.get("note"),
+            },
+        )
+
     def update_last_performed(
-        self, task_id: str, performed_date: datetime | None = None
+        self,
+        task_id: str,
+        performed_date: datetime | None = None,
+        note: str | None = None,
     ) -> None:
         """Mark a task complete: update last_performed, apply trigger effects."""
-        self._apply_completion(task_id, performed_date)
+        task = self._apply_completion(task_id, performed_date, note)
         self._save()
+        self._fire_completed_event(task)
         self._notify_updated(task_id)
 
     def complete_tasks(self, task_ids: list[str]) -> None:
@@ -418,6 +492,7 @@ class TaskStore:
 
         self._save()
         for task in completed:
+            self._fire_completed_event(task)
             async_dispatcher_send(self.hass, const.signal_task_updated(task.id))
         async_dispatcher_send(self.hass, const.SIGNAL_TASKS_CHANGED)
 

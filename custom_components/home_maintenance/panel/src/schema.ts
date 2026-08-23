@@ -7,6 +7,7 @@ export const emptyTaskFormData = (): TaskFormData => ({
     interval_value: "",
     interval_type: "days",
     last_performed: "",
+    anchor_date: "",
     icon: "",
     label: [],
     tag: "",
@@ -35,6 +36,7 @@ export const taskToFormData = (
     interval_value: task.interval_value,
     interval_type: task.interval_type,
     last_performed: task.last_performed ?? "",
+    anchor_date: task.anchor_date ?? "",
     icon: task.icon ?? "",
     label: labels.map((l) => l.label_id),
     tag: task.tag_id ?? "",
@@ -60,6 +62,7 @@ const triggerTypeSelector = (lang: string) => ({
         select: {
             options: [
                 { value: "time", label: localize("trigger_types.time", lang) },
+                { value: "date", label: localize("trigger_types.date", lang) },
                 { value: "count", label: localize("trigger_types.count", lang) },
                 { value: "runtime", label: localize("trigger_types.runtime", lang) },
             ],
@@ -68,7 +71,28 @@ const triggerTypeSelector = (lang: string) => ({
     },
 });
 
+const intervalTypeField = (lang: string) => ({
+    name: "interval_type",
+    required: true,
+    selector: {
+        select: {
+            options: INTERVAL_TYPES.map((type) => ({
+                value: type,
+                label: getIntervalTypeLabels(lang)[type],
+            })),
+            mode: "dropdown",
+        },
+    },
+});
+
 const triggerFields = (formData: TaskFormData, lang: string): any[] => {
+    if (formData.trigger_type === "date") {
+        return [
+            { name: "anchor_date", required: true, selector: { date: {} }, },
+            { name: "interval_value", required: true, selector: { number: { min: 1, mode: "box" } }, },
+            intervalTypeField(lang),
+        ];
+    }
     if (formData.trigger_type === "count") {
         return [
             { name: "count_entity_id", required: true, selector: { entity: {} }, },
@@ -83,19 +107,7 @@ const triggerFields = (formData: TaskFormData, lang: string): any[] => {
     }
     return [
         { name: "interval_value", required: true, selector: { number: { min: 1, mode: "box" } }, },
-        {
-            name: "interval_type",
-            required: true,
-            selector: {
-                select: {
-                    options: INTERVAL_TYPES.map((type) => ({
-                        value: type,
-                        label: getIntervalTypeLabels(lang)[type],
-                    })),
-                    mode: "dropdown",
-                },
-            },
-        },
+        intervalTypeField(lang),
     ];
 };
 
@@ -179,7 +191,7 @@ export const notificationFieldList = (
                 },
             },
         },
-        ...(formData.trigger_type === "time"
+        ...(formData.trigger_type === "time" || formData.trigger_type === "date"
             ? [{ name: "notify_days_before_due", selector: { number: { min: 1, mode: "box" } } }]
             : []),
         { name: "notification_time", selector: { time: { no_second: true } } },
@@ -195,6 +207,9 @@ export const validateTaskForm = (data: TaskFormData): boolean => {
     }
     if (data.trigger_type === "runtime") {
         return Boolean(data.runtime_entity_id?.trim() && data.runtime_threshold);
+    }
+    if (data.trigger_type === "date") {
+        return Boolean(data.anchor_date?.trim() && data.interval_value && data.interval_type);
     }
     return Boolean(data.interval_value && data.interval_type);
 };
@@ -232,10 +247,13 @@ const notificationPayloadFields = (data: TaskFormData): Record<string, any> => (
 const triggerPayloadFields = (data: TaskFormData): Record<string, any> => {
     const isCount = data.trigger_type === "count";
     const isRuntime = data.trigger_type === "runtime";
+    const isDate = data.trigger_type === "date";
     return {
         trigger_type: data.trigger_type || "time",
         interval_value: (isCount || isRuntime) ? 1 : Number(data.interval_value),
         interval_type: (isCount || isRuntime) ? "days" : data.interval_type,
+        // The selector emits YYYY-MM-DD; keep just the date part defensively.
+        anchor_date: isDate ? (data.anchor_date?.trim().split("T")[0] || null) : null,
         count_entity_id: isCount ? (data.count_entity_id?.trim() || null) : null,
         count_threshold: isCount ? Number(data.count_threshold) : 0,
         runtime_entity_id: isRuntime ? (data.runtime_entity_id?.trim() || null) : null,
@@ -257,6 +275,7 @@ export const taskFormToAddPayload = (data: TaskFormData, lastPerformedISO: strin
         area_id: data.area?.trim() || undefined,
         description: data.description || undefined,
         group_id: data.group_id?.trim() || undefined,
+        ...(trigger.anchor_date ? { anchor_date: trigger.anchor_date } : {}),
         ...(trigger.count_entity_id ? { count_entity_id: trigger.count_entity_id, count_threshold: trigger.count_threshold } : {}),
         ...(trigger.runtime_entity_id ? { runtime_entity_id: trigger.runtime_entity_id, runtime_threshold: trigger.runtime_threshold } : {}),
         ...notificationPayloadFields(data),

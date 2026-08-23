@@ -1,0 +1,38 @@
+{
+  "config": {
+    "flow_title": "Home Maintenance",
+    "step": {
+      "user": {
+        "title": "Konfiguracja Home Maintenance",
+        "description": "Skonfiguruj integrację Home Maintenance.",
+        "data": {
+          "admin_only": "Ogranicz panel tylko do administratorów",
+          "sidebar_title": "Nazwa wyświetlana na pasku bocznym dla tej integracji."
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Dozwolona jest tylko jedna instancja Home Maintenance."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "admin_only": "Ogranicz panel tylko do administratorów",
+          "sidebar_title": "Nazwa wyświetlana na pasku bocznym dla tej integracji."
+        }
+      }
+    }
+  },
+  "issues": {
+    "missing_watched_entity": {
+      "title": "Brak obserwowanej encji dla \"{title}\"",
+      "description": "Zadanie konserwacyjne \"{title}\" obserwuje `{entity_id}`, ale ta encja już nie istnieje. Licznik lub postęp czasu pracy zadania nie będzie się zwiększać, dopóki encja nie wróci lub zadanie nie zostanie zaktualizowane, aby obserwować inną encję."
+    },
+    "missing_notify_service": {
+      "title": "Brak usługi powiadomień dla \"{title}\"",
+      "description": "Zadanie konserwacyjne \"{title}\" wysyła powiadomienia przez `{service}`, ale ta usługa jest niedostępna. Powiadomienia dla tego zadania będą kończyć się niepowodzeniem, dopóki usługa nie wróci lub zadanie nie zostanie zaktualizowane, aby używać innej usługi powiadomień."
+    }
+  }
+}

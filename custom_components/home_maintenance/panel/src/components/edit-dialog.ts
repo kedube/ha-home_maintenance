@@ -1,11 +1,11 @@
-import { LitElement, html, css } from "lit";
+import { LitElement, html, css, nothing } from "lit";
 import { property, state } from "lit/decorators.js";
 import type { HomeAssistant } from "custom-card-helpers";
 
 import { localize } from '../../localize/localize';
 import { commonStyle } from '../styles';
 import { showToast } from '../toast';
-import { dialogFooter, listNotifyServices } from '../util';
+import { dialogFooter, historyStyles, listNotifyServices, renderHistoryList } from '../util';
 import { loadTask, updateTask } from '../data/websockets';
 import { renderTaskField, taskFieldStyles } from './task-fields';
 import {
@@ -19,7 +19,7 @@ import {
     taskToFormData,
     validateTaskForm,
 } from '../schema';
-import { EntityRegistryEntry, Label, TaskFormData } from '../types';
+import { EntityRegistryEntry, HistoryEntry, Label, TaskFormData } from '../types';
 
 /**
  * The edit-task dialog. Call open(taskId) to load a task and show it.
@@ -34,6 +34,7 @@ class HMEditDialog extends LitElement {
 
     @state() private _taskId: string | null = null;
     @state() private _formData: TaskFormData = emptyTaskFormData();
+    @state() private _history: HistoryEntry[] = [];
 
     public async open(taskId: string) {
         try {
@@ -43,6 +44,7 @@ class HMEditDialog extends LitElement {
                 ? this.labelRegistry.filter((lr) => entity.labels.includes(lr.label_id))
                 : [];
             this._formData = taskToFormData(task, entity, labels);
+            this._history = task.history ?? [];
             this._taskId = task.id;
         } catch (e) {
             console.error("Failed to fetch task for edit:", e);
@@ -78,6 +80,7 @@ class HMEditDialog extends LitElement {
     private _close() {
         this._taskId = null;
         this._formData = emptyTaskFormData();
+        this._history = [];
     }
 
     /** Send the task's notification now (uses the last saved settings). */
@@ -149,6 +152,13 @@ class HMEditDialog extends LitElement {
                     </ha-button>
                 ` : ""}
 
+                ${this._history.length ? html`
+                    <div class="section-label">
+                        ${localize('panel.dialog.edit_task.sections.history', lang)}
+                    </div>
+                    ${renderHistoryList(this._history, 10, this.hass.locale)}
+                ` : nothing}
+
                 ${dialogFooter(html`
                     <ha-button
                         data-dialog="close"
@@ -166,7 +176,7 @@ class HMEditDialog extends LitElement {
         `;
     }
 
-    static styles = [commonStyle, taskFieldStyles, css`
+    static styles = [commonStyle, taskFieldStyles, historyStyles, css`
         .section-label {
             font-weight: 500;
             color: var(--secondary-text-color);

@@ -14,11 +14,14 @@
         "weeks": "Wochen",
         "month": "Monat",
         "months": "Monate",
+        "year": "Jahr",
+        "years": "Jahre",
         "every_uses": "Alle {value} Nutzungen",
         "every_runtime": "Alle {value} Laufzeit"
     },
     "trigger_types": {
         "time": "Zeitbasiert",
+        "date": "Festes Datum",
         "count": "Zählerbasiert",
         "runtime": "Laufzeitbasiert"
     },
@@ -32,6 +35,26 @@
     "card": {
         "add_task": {
             "added": "\"{title}\" wurde hinzugefügt."
+        },
+        "todo": {
+            "due_today": "Heute fällig",
+            "days_overdue": "{count, plural, one {1 Tag überfällig} other {# Tage überfällig}}",
+            "days_left": "{count, plural, one {Fällig in 1 Tag} other {Noch # Tage}}",
+            "search": "Aufgaben suchen...",
+            "all_groups": "Alle Gruppen",
+            "overdue": "Überfällig",
+            "due_soon": "Bald fällig",
+            "upcoming": "Anstehend",
+            "no_tasks": "Keine Aufgaben gefunden",
+            "done": "Erledigt",
+            "description": "Beschreibung",
+            "last_performed": "Zuletzt durchgeführt",
+            "progress": "Fortschritt",
+            "history": "Verlauf",
+            "open_panel": "Vollständiges Panel öffnen",
+            "complete": "Abschließen",
+            "edit": "Im Panel bearbeiten",
+            "remove": "Entfernen"
         }
     },
     "panel": {
@@ -51,6 +74,10 @@
                     "last_performed": {
                         "heading": "Zuletzt durchgeführt",
                         "helper": "Leer lassen, um heutiges Datum zu verwenden"
+                    },
+                    "anchor_date": {
+                        "heading": "Ankerdatum",
+                        "helper": "Der Zeitplan wiederholt sich ab diesem festen Datum"
                     },
                     "tag": {
                         "heading": "Tag"
@@ -179,6 +206,10 @@
                         "heading": "Zuletzt durchgeführt",
                         "helper": "Leer lassen, um heutiges Datum zu verwenden"
                     },
+                    "anchor_date": {
+                        "heading": "Ankerdatum",
+                        "helper": "Der Zeitplan wiederholt sich ab diesem festen Datum"
+                    },
                     "tag": {
                         "heading": "Tag"
                     },
@@ -241,7 +272,8 @@
                 },
                 "sections": {
                     "optional": "Optionale Einstellungen",
-                    "notifications": "Benachrichtigungen"
+                    "notifications": "Benachrichtigungen",
+                    "history": "Verlauf"
                 },
                 "actions": {
                     "cancel": "Abbrechen",
@@ -269,6 +301,7 @@
                 "title": "Aufgabe als erledigt markieren",
                 "message": "\"{title}\" als erledigt markieren? Zuletzt durchgeführt wird auf heute zurückgesetzt und das nächste Fälligkeitsdatum wird basierend auf dem Intervall von {interval} neu berechnet.",
                 "message_progress": "\"{title}\" als erledigt markieren? Der Fortschritt ({interval}) beginnt von vorn.",
+                "note_label": "Notiz (optional)",
                 "actions": {
                     "cancel": "Abbrechen",
                     "confirm": "Als erledigt markieren"

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import functools
 import uuid
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 import voluptuous as vol
@@ -23,7 +24,12 @@ from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, SIGNAL_TASKS_CHANGED, VERSION
 from .store import HomeMaintenanceTask
-from .task_fields import ADD_TASK_FIELDS, INTERVAL_TYPES, TASK_FIELD_VALIDATORS
+from .task_fields import (
+    ADD_TASK_FIELDS,
+    INTERVAL_TYPES,
+    TASK_FIELD_VALIDATORS,
+    bounded_str_or_none,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -154,7 +160,17 @@ def websocket_add_task(
     """Add a new task. The store validates trigger-specific required fields."""
     store = _get_store(hass)
 
-    last_performed = _normalize_last_performed(msg.get("last_performed"))
+    raw_last_performed = msg.get("last_performed")
+    # A fixed-date task created without a last-performed date starts with its
+    # anchor pending: default to the day before the anchor so a past (or
+    # today's) anchor is immediately due, instead of "completed today"
+    # silently deferring it a full interval.
+    if not raw_last_performed and msg.get("trigger_type") == "date":
+        anchor = dt_util.parse_date(str(msg.get("anchor_date", "")).split("T")[0])
+        if anchor is not None:
+            raw_last_performed = (anchor - timedelta(days=1)).isoformat()
+
+    last_performed = _normalize_last_performed(raw_last_performed)
     if last_performed is None:
         connection.send_error(
             msg["id"], "invalid_date", f"Could not parse date: {msg['last_performed']}"
@@ -216,6 +232,7 @@ def websocket_update_task(
     {
         vol.Required("type"): "home_maintenance/complete_task",
         vol.Required("task_id"): str,
+        vol.Optional("note"): bounded_str_or_none,
     }
 )
 @callback
@@ -223,8 +240,8 @@ def websocket_update_task(
 def websocket_complete_task(
     hass: HomeAssistant, connection: connection.ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Mark a task as completed."""
-    _get_store(hass).update_last_performed(msg["task_id"])
+    """Mark a task as completed, optionally recording a history note."""
+    _get_store(hass).update_last_performed(msg["task_id"], note=msg.get("note"))
     connection.send_result(msg["id"], {"success": True})
 
 

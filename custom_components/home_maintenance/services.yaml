@@ -17,6 +17,13 @@ reset_last_performed:
       example: "2025-06-01"
       selector:
         date:
+    note:
+      name: Note
+      description: Optional note recorded in the task's completion history.
+      required: false
+      example: "Replaced with MERV 13 filter"
+      selector:
+        text:
 
 increment_count:
   name: Increment Count

@@ -1,41 +1,15 @@
-import { html, TemplateResult } from "lit";
+import { css, html, nothing, TemplateResult } from "lit";
 import type { HomeAssistant } from "custom-card-helpers";
+import { formatDateNumeric } from "custom-card-helpers";
 
-import { localize } from '../localize/localize';
-import { Task } from './types';
+import { parseStoredDate } from './compute';
+import { HistoryEntry } from './types';
 
 /**
- * Parse a stored ISO date/datetime as a local calendar date (midnight).
- * The backend stores local-midnight ISO strings; `new Date(iso)` would shift
- * them through the browser timezone and can land on the neighboring day.
+ * DOM- and HA-dependent helpers. Pure task computations live in compute.ts
+ * (unit-tested in plain Node); this module holds everything that renders or
+ * talks to the frontend runtime.
  */
-export const parseStoredDate = (value: string): Date => {
-    const [datePart] = value.split("T");
-    const [year, month, day] = datePart.split("-").map(Number);
-    return new Date(year, month - 1, day);
-};
-
-/** "3 / 10" progress label for count/runtime tasks. */
-export const formatProgress = (task: Task): string =>
-    `${task.progress_current ?? 0} / ${task.progress_target ?? 0}`;
-
-/** Localized "30 Days" / "1 Week" label for a time-based interval. */
-export const formatTimeInterval = (value: number, type: string, lang: string): string => {
-    const key = value === 1 ? type.slice(0, -1) : type;
-    return `${value} ${localize(`intervals.${key}`, lang)}`;
-};
-
-/** Trigger-aware interval label: threshold for count/runtime, span for time. */
-export const formatTriggerInterval = (task: Task, lang: string): string => {
-    const triggerType = task.trigger_type ?? "time";
-    if (triggerType === "count") {
-        return localize('intervals.every_uses', lang, '{value}', String(task.count_threshold ?? 0));
-    }
-    if (triggerType === "runtime") {
-        return localize('intervals.every_runtime', lang, '{value}', String(task.runtime_threshold ?? 0));
-    }
-    return formatTimeInterval(task.interval_value, task.interval_type, lang);
-};
 
 /** Sorted "notify.<service>" ids from the frontend's service registry. */
 export const listNotifyServices = (hass: HomeAssistant): string[] =>
@@ -53,22 +27,40 @@ export const dialogFooter = (buttons: TemplateResult): TemplateResult =>
         ? html`<ha-dialog-footer slot="footer">${buttons}</ha-dialog-footer>`
         : buttons;
 
-/** Trailing-edge debouncer for coalescing subscription pushes. */
-export class Debouncer {
-    private _timer?: ReturnType<typeof setTimeout>;
+/**
+ * The completion-history list ("8/21/2026 — note" items, newest first),
+ * shared by the edit dialog and the todo card's expanded view. Pair with
+ * historyStyles in the consuming component's styles.
+ */
+export const renderHistoryList = (
+    history: HistoryEntry[] | undefined,
+    count: number,
+    locale: HomeAssistant["locale"],
+): TemplateResult | typeof nothing => {
+    if (!history?.length) return nothing;
+    return html`
+        <ul class="history-list">
+            ${history.slice(-count).reverse().map((entry) => html`
+                <li>
+                    ${formatDateNumeric(parseStoredDate(entry.performed), locale)}${entry.note ? html` — <span class="history-note">${entry.note}</span>` : nothing}
+                </li>
+            `)}
+        </ul>
+    `;
+};
 
-    constructor(private readonly _fn: () => void, private readonly _ms: number) { }
-
-    schedule() {
-        this.cancel();
-        this._timer = setTimeout(() => {
-            this._timer = undefined;
-            this._fn();
-        }, this._ms);
+export const historyStyles = css`
+    .history-list {
+        margin: 0;
+        padding-left: 18px;
+        font-size: 14px;
     }
 
-    cancel() {
-        if (this._timer !== undefined) clearTimeout(this._timer);
-        this._timer = undefined;
+    .history-list li {
+        margin: 2px 0;
     }
-}
+
+    .history-note {
+        color: var(--secondary-text-color);
+    }
+`;

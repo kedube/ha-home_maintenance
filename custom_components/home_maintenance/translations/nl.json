@@ -1,0 +1,38 @@
+{
+  "config": {
+    "flow_title": "Home Maintenance",
+    "step": {
+      "user": {
+        "title": "Home Maintenance configureren",
+        "description": "Stel de Home Maintenance-integratie in.",
+        "data": {
+          "admin_only": "Beperk het paneel tot alleen beheerders",
+          "sidebar_title": "De naam die in de zijbalk wordt getoond voor deze integratie."
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Er is slechts één instantie van Home Maintenance toegestaan."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "admin_only": "Beperk het paneel tot alleen beheerders",
+          "sidebar_title": "De naam die in de zijbalk wordt getoond voor deze integratie."
+        }
+      }
+    }
+  },
+  "issues": {
+    "missing_watched_entity": {
+      "title": "Bewaakte entiteit voor \"{title}\" ontbreekt",
+      "description": "De onderhoudstaak \"{title}\" bewaakt `{entity_id}`, maar die entiteit bestaat niet meer. De teller- of draaitijdvoortgang van de taak wordt niet bijgewerkt totdat de entiteit terugkeert of de taak wordt aangepast om een andere entiteit te bewaken."
+    },
+    "missing_notify_service": {
+      "title": "Meldingsservice voor \"{title}\" ontbreekt",
+      "description": "De onderhoudstaak \"{title}\" verstuurt meldingen via `{service}`, maar die service is niet beschikbaar. Meldingen voor deze taak zullen mislukken totdat de service terugkeert of de taak wordt aangepast om een andere meldingsservice te gebruiken."
+    }
+  }
+}

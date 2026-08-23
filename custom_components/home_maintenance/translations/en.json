@@ -24,5 +24,15 @@
         }
       }
     }
+  },
+  "issues": {
+    "missing_watched_entity": {
+      "title": "Watched entity for \"{title}\" is missing",
+      "description": "The maintenance task \"{title}\" watches `{entity_id}`, but that entity no longer exists. The task's counter or runtime progress will not advance until the entity returns or the task is updated to watch a different entity."
+    },
+    "missing_notify_service": {
+      "title": "Notify service for \"{title}\" is missing",
+      "description": "The maintenance task \"{title}\" sends notifications via `{service}`, but that service is not available. Notifications for this task will fail until the service returns or the task is updated to use a different notify service."
+    }
   }
 }

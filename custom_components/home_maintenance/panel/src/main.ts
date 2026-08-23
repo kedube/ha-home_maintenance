@@ -6,7 +6,7 @@ import { localize } from '../localize/localize';
 import { loadConfigDashboard } from "./helpers";
 import { showToast } from './toast';
 import { commonStyle } from './styles'
-import { Debouncer } from './util';
+import { Debouncer } from './compute';
 import { EntityRegistryEntry, IntegrationConfig, Label, Task, Tag } from './types';
 import {
     getConfig,

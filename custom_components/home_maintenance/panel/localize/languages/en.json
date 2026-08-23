@@ -14,11 +14,14 @@
         "weeks": "Weeks",
         "month": "Month",
         "months": "Months",
+        "year": "Year",
+        "years": "Years",
         "every_uses": "Every {value} uses",
         "every_runtime": "Every {value} runtime"
     },
     "trigger_types": {
         "time": "Time-based",
+        "date": "Fixed date",
         "count": "Count-based",
         "runtime": "Runtime-based"
     },
@@ -32,6 +35,26 @@
     "card": {
         "add_task": {
             "added": "\"{title}\" added."
+        },
+        "todo": {
+            "due_today": "Due today",
+            "days_overdue": "{count, plural, one {1 day overdue} other {# days overdue}}",
+            "days_left": "{count, plural, one {Due in 1 day} other {# days left}}",
+            "search": "Search tasks...",
+            "all_groups": "All groups",
+            "overdue": "Overdue",
+            "due_soon": "Due soon",
+            "upcoming": "Upcoming",
+            "no_tasks": "No tasks found",
+            "done": "Done",
+            "description": "Description",
+            "last_performed": "Last Performed",
+            "progress": "Progress",
+            "history": "History",
+            "open_panel": "Open full panel",
+            "complete": "Complete",
+            "edit": "Edit in panel",
+            "remove": "Remove"
         }
     },
     "panel": {
@@ -51,6 +74,10 @@
                     "last_performed": {
                         "heading": "Last Performed",
                         "helper": "Leave blank to use today"
+                    },
+                    "anchor_date": {
+                        "heading": "Anchor date",
+                        "helper": "The schedule repeats from this fixed date"
                     },
                     "tag": {
                         "heading": "Tag"
@@ -179,6 +206,10 @@
                         "heading": "Last Performed",
                         "helper": "Leave blank to use today"
                     },
+                    "anchor_date": {
+                        "heading": "Anchor date",
+                        "helper": "The schedule repeats from this fixed date"
+                    },
                     "tag": {
                         "heading": "Tag"
                     },
@@ -241,7 +272,8 @@
                 },
                 "sections": {
                     "optional": "Optional settings",
-                    "notifications": "Notifications"
+                    "notifications": "Notifications",
+                    "history": "History"
                 },
                 "actions": {
                     "cancel": "Cancel",
@@ -269,6 +301,7 @@
                 "title": "Mark Task Complete",
                 "message": "Mark \"{title}\" as complete? Last performed will be reset to today and the next due date will be recalculated based on the {interval} interval.",
                 "message_progress": "Mark \"{title}\" as complete? Progress ({interval}) will start over.",
+                "note_label": "Note (optional)",
                 "actions": {
                     "cancel": "Cancel",
                     "confirm": "Mark Complete"

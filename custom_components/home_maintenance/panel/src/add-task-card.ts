@@ -5,7 +5,7 @@ import { fireEvent } from "custom-card-helpers";
 
 import { localize } from '../localize/localize';
 import { loadConfigDashboard } from './helpers';
-import { Debouncer } from './util';
+import { Debouncer } from './compute';
 import { loadGroups, subscribeUpdates } from './data/websockets';
 import './components/task-form';
 

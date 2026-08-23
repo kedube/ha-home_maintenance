@@ -1,0 +1,319 @@
+{
+    "common": {
+        "loading": "Carregando...",
+        "none": "Nenhum",
+        "no_tasks": "Nenhuma tarefa encontrada.",
+        "ungrouped": "Sem grupo",
+        "cancel": "Cancelar",
+        "invalid_date": "Data inválida."
+    },
+    "intervals": {
+        "day": "Dia",
+        "days": "Dias",
+        "week": "Semana",
+        "weeks": "Semanas",
+        "month": "Mês",
+        "months": "Meses",
+        "year": "Ano",
+        "years": "Anos",
+        "every_uses": "A cada {value} usos",
+        "every_runtime": "A cada {value} de tempo de uso"
+    },
+    "trigger_types": {
+        "time": "Por tempo",
+        "date": "Data fixa",
+        "count": "Por contagem",
+        "runtime": "Por tempo de uso"
+    },
+    "notifications": {
+        "when": {
+            "due": "No vencimento",
+            "overdue": "Em atraso",
+            "due_and_overdue": "No vencimento e em atraso"
+        }
+    },
+    "card": {
+        "add_task": {
+            "added": "\"{title}\" adicionada."
+        },
+        "todo": {
+            "due_today": "Vence hoje",
+            "days_overdue": "{count, plural, one {1 dia de atraso} other {# dias de atraso}}",
+            "days_left": "{count, plural, one {Vence em 1 dia} other {Faltam # dias}}",
+            "search": "Pesquisar tarefas...",
+            "all_groups": "Todos os grupos",
+            "overdue": "Atrasadas",
+            "due_soon": "Vence em breve",
+            "upcoming": "Próximas",
+            "no_tasks": "Nenhuma tarefa encontrada",
+            "done": "Concluídas",
+            "description": "Descrição",
+            "last_performed": "Última execução",
+            "progress": "Progresso",
+            "history": "Histórico",
+            "open_panel": "Abrir painel completo",
+            "complete": "Concluir",
+            "edit": "Editar no painel",
+            "remove": "Remover"
+        }
+    },
+    "panel": {
+        "cards": {
+            "new": {
+                "title": "Criar nova tarefa",
+                "fields": {
+                    "title": {
+                        "heading": "Título da tarefa"
+                    },
+                    "interval_value": {
+                        "heading": "Intervalo"
+                    },
+                    "interval_type": {
+                        "heading": "Tipo de intervalo"
+                    },
+                    "last_performed": {
+                        "heading": "Última execução",
+                        "helper": "Deixe em branco para usar hoje"
+                    },
+                    "anchor_date": {
+                        "heading": "Data de referência",
+                        "helper": "O agendamento se repete a partir desta data fixa"
+                    },
+                    "tag": {
+                        "heading": "Tag"
+                    },
+                    "icon": {
+                        "heading": "Ícone"
+                    },
+                    "label": {
+                        "heading": "Etiqueta(s)"
+                    },
+                    "area": {
+                        "heading": "Área"
+                    },
+                    "description": {
+                        "heading": "Descrição"
+                    },
+                    "trigger_type": {
+                        "heading": "Tipo de gatilho"
+                    },
+                    "count_entity_id": {
+                        "heading": "Entidade contada"
+                    },
+                    "count_threshold": {
+                        "heading": "Limite de contagem"
+                    },
+                    "runtime_entity_id": {
+                        "heading": "Sensor de tempo de uso"
+                    },
+                    "runtime_threshold": {
+                        "heading": "Limite de tempo de uso"
+                    },
+                    "group_id": {
+                        "heading": "Grupo",
+                        "helper": "Escolha um grupo ou digite um novo nome"
+                    },
+                    "notifications_enabled": {
+                        "heading": "Ativar notificações"
+                    },
+                    "notification_target": {
+                        "heading": "Serviço de notificação",
+                        "helper": "Deixe em branco para usar notify.notify"
+                    },
+                    "notify_when": {
+                        "heading": "Notificar quando"
+                    },
+                    "notify_days_before_due": {
+                        "heading": "Dias antes do vencimento",
+                        "helper": "Antecedência opcional do lembrete de vencimento"
+                    },
+                    "notification_time": {
+                        "heading": "Horário do dia",
+                        "helper": "Quando as notificações automáticas são enviadas"
+                    },
+                    "notification_url": {
+                        "heading": "URL para abrir",
+                        "helper": "URL opcional para a ação Abrir da notificação"
+                    }
+                },
+                "sections": {
+                    "optional": "Configurações opcionais",
+                    "notifications": "Notificações"
+                },
+                "actions": {
+                    "add_task": "Adicionar tarefa"
+                },
+                "alerts": {
+                    "required": "Preencha todos os campos",
+                    "error": "Erro ao adicionar a tarefa. Veja o console para detalhes."
+                }
+            },
+            "current": {
+                "title": "Tarefas atuais",
+                "no_items": "Nenhuma tarefa encontrada.",
+                "every": "a cada",
+                "last": "Última",
+                "next": "Próximo vencimento",
+                "actions": {
+                    "complete": "Concluir",
+                    "edit": "Editar",
+                    "move": "Mover para grupo",
+                    "remove": "Remover"
+                },
+                "confirm_remove": "Tem certeza de que deseja remover esta tarefa?",
+                "alerts": {
+                    "complete_success": "\"{title}\" marcada como concluída. O próximo vencimento foi recalculado.",
+                    "complete_error": "Falha ao marcar a tarefa como concluída. Veja o console para detalhes.",
+                    "remove_error": "Falha ao remover a tarefa. Veja o console para detalhes."
+                }
+            },
+            "groups": {
+                "title": "Grupos",
+                "fields": {
+                    "new_group": {
+                        "heading": "Novo grupo"
+                    }
+                },
+                "actions": {
+                    "create": "Criar",
+                    "rename": "Renomear",
+                    "delete": "Excluir",
+                    "save": "Salvar",
+                    "cancel": "Cancelar"
+                },
+                "empty": "Nenhum grupo ainda. Crie um para organizar suas tarefas.",
+                "confirm_delete": "Excluir o grupo \"{title}\"? Suas tarefas irão para Sem grupo.",
+                "alerts": {
+                    "error": "Falha ao criar o grupo. Verifique o console do navegador e os logs do Home Assistant.",
+                    "exists": "O grupo \"{title}\" já existe.",
+                    "rename_error": "Falha ao renomear o grupo. Veja o console para detalhes.",
+                    "delete_error": "Falha ao excluir o grupo. Veja o console para detalhes."
+                },
+                "confirm_delete_title": "Excluir grupo"
+            }
+        },
+        "dialog": {
+            "edit_task": {
+                "title": "Editar tarefa",
+                "fields": {
+                    "interval_value": {
+                        "heading": "Intervalo"
+                    },
+                    "interval_type": {
+                        "heading": "Tipo de intervalo"
+                    },
+                    "last_performed": {
+                        "heading": "Última execução",
+                        "helper": "Deixe em branco para usar hoje"
+                    },
+                    "anchor_date": {
+                        "heading": "Data de referência",
+                        "helper": "O agendamento se repete a partir desta data fixa"
+                    },
+                    "tag": {
+                        "heading": "Tag"
+                    },
+                    "icon": {
+                        "heading": "Ícone"
+                    },
+                    "label": {
+                        "heading": "Etiqueta(s)"
+                    },
+                    "area": {
+                        "heading": "Área"
+                    },
+                    "trigger_type": {
+                        "heading": "Tipo de gatilho"
+                    },
+                    "count_entity_id": {
+                        "heading": "Entidade contada"
+                    },
+                    "count_threshold": {
+                        "heading": "Limite de contagem"
+                    },
+                    "runtime_entity_id": {
+                        "heading": "Sensor de tempo de uso"
+                    },
+                    "runtime_threshold": {
+                        "heading": "Limite de tempo de uso"
+                    },
+                    "title": {
+                        "heading": "Título"
+                    },
+                    "description": {
+                        "heading": "Descrição"
+                    },
+                    "group_id": {
+                        "heading": "Grupo",
+                        "helper": "Escolha um grupo ou digite um novo nome"
+                    },
+                    "notifications_enabled": {
+                        "heading": "Ativar notificações"
+                    },
+                    "notification_target": {
+                        "heading": "Serviço de notificação",
+                        "helper": "Deixe em branco para usar notify.notify"
+                    },
+                    "notify_when": {
+                        "heading": "Notificar quando"
+                    },
+                    "notify_days_before_due": {
+                        "heading": "Dias antes do vencimento",
+                        "helper": "Antecedência opcional do lembrete de vencimento"
+                    },
+                    "notification_time": {
+                        "heading": "Horário do dia",
+                        "helper": "Quando as notificações automáticas são enviadas"
+                    },
+                    "notification_url": {
+                        "heading": "URL para abrir",
+                        "helper": "URL opcional para a ação Abrir da notificação"
+                    }
+                },
+                "sections": {
+                    "optional": "Configurações opcionais",
+                    "notifications": "Notificações",
+                    "history": "Histórico"
+                },
+                "actions": {
+                    "cancel": "Cancelar",
+                    "save": "Salvar",
+                    "test_notification": "Enviar notificação de teste"
+                },
+                "alerts": {
+                    "error": "Falha ao salvar as alterações. Veja o console para detalhes.",
+                    "test_error": "Falha ao enviar a notificação de teste. Veja o console para detalhes."
+                }
+            },
+            "move_task": {
+                "title": "Mover tarefa",
+                "fields": {
+                    "group_id": {
+                        "heading": "Grupo"
+                    }
+                },
+                "actions": {
+                    "cancel": "Cancelar",
+                    "move": "Mover"
+                }
+            },
+            "confirm_complete": {
+                "title": "Marcar tarefa como concluída",
+                "message": "Marcar \"{title}\" como concluída? A última execução será redefinida para hoje e o próximo vencimento será recalculado com base no intervalo de {interval}.",
+                "message_progress": "Marcar \"{title}\" como concluída? O progresso ({interval}) recomeçará do zero.",
+                "note_label": "Nota (opcional)",
+                "actions": {
+                    "cancel": "Cancelar",
+                    "confirm": "Marcar como concluída"
+                }
+            },
+            "confirm_remove": {
+                "title": "Remover tarefa",
+                "message": "Remover \"{title}\"? Isso não pode ser desfeito.",
+                "actions": {
+                    "confirm": "Remover"
+                }
+            }
+        }
+    }
+}

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR_PLATFORM
 from homeassistant.components.calendar import DOMAIN as CALENDAR_PLATFORM
 from homeassistant.components.tag.const import EVENT_TAG_SCANNED
+from homeassistant.components.todo import DOMAIN as TODO_PLATFORM
 from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
@@ -26,6 +27,7 @@ from .panel import (
     async_register_panel,
     async_unregister_panel,
 )
+from .repairs import RepairsManager
 from .store import TaskStore
 from .triggers import UNAVAILABLE_STATES, get_trigger
 from .websocket import async_register_websockets
@@ -41,7 +43,7 @@ _LOGGER = logging.getLogger(__name__)
 
 CONFIG_SCHEMA = const.CONFIG_SCHEMA
 
-PLATFORMS = [BINARY_SENSOR_PLATFORM, CALENDAR_PLATFORM]
+PLATFORMS = [BINARY_SENSOR_PLATFORM, CALENDAR_PLATFORM, TODO_PLATFORM]
 
 
 @dataclass
@@ -97,6 +99,10 @@ async def async_setup_entry(
     # Per-task notifications
     data.notifications = NotificationManager(hass, task_store)
     for unsub in data.notifications.async_setup():
+        entry.async_on_unload(unsub)
+
+    # Repairs issues for broken watched-entity / notify-service references
+    for unsub in RepairsManager(hass, task_store).async_setup():
         entry.async_on_unload(unsub)
 
     @callback
@@ -241,7 +247,9 @@ def register_services(hass: HomeAssistant) -> None:
             return
 
         data: HomeMaintenanceData = hass.data[const.DOMAIN]
-        data.store.update_last_performed(task_id, performed_date)
+        data.store.update_last_performed(
+            task_id, performed_date, note=call.data.get("note")
+        )
 
     hass.services.async_register(
         const.DOMAIN,

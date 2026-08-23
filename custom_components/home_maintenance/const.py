@@ -15,6 +15,17 @@ DOMAIN = "home_maintenance"
 # schemas so a client cannot bloat the storage file with huge strings.
 MAX_STRING_LENGTH = 500
 
+# Completion-history entries kept per task (oldest dropped beyond this), and
+# how many of them ride along in the task-list payload every panel refetches
+# on every change (the single-task fetch returns the full history).
+MAX_HISTORY_ENTRIES = 50
+LIST_HISTORY_ENTRIES = 5
+
+# Calendar projection bounds: future occurrences per task are generated up to
+# this horizon, capped so a short-interval task can't flood the calendar.
+CALENDAR_PROJECTION_DAYS = 365
+CALENDAR_MAX_OCCURRENCES = 53
+
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 PANEL_FILENAME = "panel/main.js"
@@ -61,11 +72,18 @@ def signal_task_updated(task_id: str) -> str:
     return f"{DOMAIN}_task_updated_{task_id}"
 
 
+# Bus events for automations. task_completed fires on every completion (panel,
+# service, tag scan, mobile action, todo item); task_due fires when a task's
+# entity transitions to due while Home Assistant is running.
+EVENT_TASK_COMPLETED = f"{DOMAIN}_task_completed"
+EVENT_TASK_DUE = f"{DOMAIN}_task_due"
+
 SERVICE_RESET = "reset_last_performed"
 SERVICE_RESET_SCHEMA = vol.Schema(
     {
         vol.Required("entity_id"): cv.entity_id,
         vol.Optional("performed_date"): cv.string,
+        vol.Optional("note"): vol.All(cv.string, vol.Length(max=MAX_STRING_LENGTH)),
     }
 )
 

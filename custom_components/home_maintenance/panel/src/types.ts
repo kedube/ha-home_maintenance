@@ -1,14 +1,29 @@
 import { localize } from '../localize/localize'
 
-export type IntervalType = "days" | "weeks" | "months";
+export type IntervalType = "days" | "weeks" | "months" | "years";
 
-export const INTERVAL_TYPES: IntervalType[] = ["days", "weeks", "months"];
+export const INTERVAL_TYPES: IntervalType[] = ["days", "weeks", "months", "years"];
+
+// Approximate day length of one interval unit, for sort keys. A Record over
+// IntervalType so adding a unit without an entry is a compile error instead
+// of a silently wrong sort.
+export const INTERVAL_TYPE_DAYS: Record<IntervalType, number> = {
+    days: 1,
+    weeks: 7,
+    months: 30,
+    years: 365,
+};
+
+// Mirror of the backend's MAX_STRING_LENGTH cap on free-text fields
+// (const.py); keeps inputs from accepting text the API would reject.
+export const MAX_TEXT_LENGTH = 500;
 
 export function getIntervalTypeLabels(lang: string): Record<IntervalType, string> {
     return {
         days: localize("intervals.days", lang),
         weeks: localize("intervals.weeks", lang),
         months: localize("intervals.months", lang),
+        years: localize("intervals.years", lang),
     };
 }
 
@@ -42,9 +57,15 @@ export interface EntityRegistryEntry {
     labels: string[];
 }
 
-export type TriggerType = "time" | "count" | "runtime";
+export type TriggerType = "time" | "date" | "count" | "runtime";
 
 export type NotifyWhen = "due" | "overdue" | "due_and_overdue";
+
+export interface HistoryEntry {
+    performed: string;
+    recorded_at?: string | null;
+    note?: string | null;
+}
 
 export interface Task {
     id: string;
@@ -52,6 +73,7 @@ export interface Task {
     interval_value: number;
     interval_type: IntervalType;
     last_performed: string;
+    anchor_date?: string | null;
     tag_id?: string;
     icon?: string;
     trigger_type?: TriggerType;
@@ -71,6 +93,8 @@ export interface Task {
     notify_when?: NotifyWhen;
     notify_days_before_due?: number | null;
     snooze_until?: string | null;
+    // Completion history, newest last. Integration-managed (read-only).
+    history?: HistoryEntry[];
     // Computed by the backend (store.serialize) so the panel renders trigger
     // state without reimplementing trigger semantics.
     due?: boolean;
@@ -85,6 +109,7 @@ export interface TaskFormData {
     interval_value: number | "";
     interval_type: string;
     last_performed: string;
+    anchor_date: string;
     icon: string;
     label: string[];
     tag: string;

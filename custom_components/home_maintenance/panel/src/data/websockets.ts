@@ -39,10 +39,11 @@ export const removeTask = (hass: HomeAssistant, id: string): Promise<void> =>
         task_id: id,
     });
 
-export const completeTask = (hass: HomeAssistant, id: string): Promise<void> =>
+export const completeTask = (hass: HomeAssistant, id: string, note?: string): Promise<void> =>
     hass.callWS({
         type: 'home_maintenance/complete_task',
         task_id: id,
+        ...(note ? { note } : {}),
     })
 
 export const updateTask = (hass: HomeAssistant, payload: Record<string, any>): Promise<void> =>

@@ -1,0 +1,38 @@
+{
+  "config": {
+    "flow_title": "Home Maintenance",
+    "step": {
+      "user": {
+        "title": "Configurar Home Maintenance",
+        "description": "Configure a integração Home Maintenance.",
+        "data": {
+          "admin_only": "Restringir o painel apenas a administradores",
+          "sidebar_title": "O nome exibido na barra lateral para esta integração."
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Apenas uma única instância do Home Maintenance é permitida."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "admin_only": "Restringir o painel apenas a administradores",
+          "sidebar_title": "O nome exibido na barra lateral para esta integração."
+        }
+      }
+    }
+  },
+  "issues": {
+    "missing_watched_entity": {
+      "title": "A entidade monitorada de \"{title}\" está ausente",
+      "description": "A tarefa de manutenção \"{title}\" monitora `{entity_id}`, mas essa entidade não existe mais. O contador ou o progresso de tempo de uso da tarefa não avançará até que a entidade retorne ou a tarefa seja atualizada para monitorar outra entidade."
+    },
+    "missing_notify_service": {
+      "title": "O serviço de notificação de \"{title}\" está ausente",
+      "description": "A tarefa de manutenção \"{title}\" envia notificações via `{service}`, mas esse serviço não está disponível. As notificações desta tarefa falharão até que o serviço retorne ou a tarefa seja atualizada para usar outro serviço de notificação."
+    }
+  }
+}

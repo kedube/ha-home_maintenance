@@ -5,8 +5,8 @@ import { formatDateNumeric } from "custom-card-helpers";
 
 import { localize } from '../../localize/localize';
 import { commonStyle } from '../styles';
-import { formatProgress, formatTimeInterval, parseStoredDate } from '../util';
-import { EntityRegistryEntry, Label, Task } from '../types';
+import { formatProgress, formatTimeInterval, isDatedTrigger, parseStoredDate } from '../compute';
+import { EntityRegistryEntry, INTERVAL_TYPE_DAYS, Label, Task } from '../types';
 import { mdiCheckCircleOutline } from "@mdi/js";
 import './hm-task-menu'
 
@@ -77,7 +77,7 @@ class HMTaskTable extends LitElement {
                 minWidth: "100px",
                 maxWidth: "100px",
                 template: (task: any) => {
-                    if (task.trigger_type !== "time") {
+                    if (!isDatedTrigger(task)) {
                         return formatProgress(task);
                     }
                     return formatTimeInterval(task.interval_value, task.interval_type, this.hass!.language);
@@ -90,7 +90,7 @@ class HMTaskTable extends LitElement {
                 minWidth: "150px",
                 maxWidth: "150px",
                 template: (task: any) => {
-                    if (task.trigger_type !== "time" || !task.last_performed) return "-";
+                    if (!isDatedTrigger(task) || !task.last_performed) return "-";
                     return formatDateNumeric(parseStoredDate(task.last_performed), this.hass!.locale);
                 }
             },
@@ -103,7 +103,7 @@ class HMTaskTable extends LitElement {
                 maxWidth: "100px",
                 template: (task: any) => {
                     const style = task.due ? "color: var(--error-color, red); font-weight: bold;" : "";
-                    if (task.trigger_type !== "time") {
+                    if (!isDatedTrigger(task)) {
                         return html`
                             <span style=${style}>
                                 ${formatProgress(task)}
@@ -246,16 +246,8 @@ class HMTaskTable extends LitElement {
             if (!task.progress_target) return Number.MAX_SAFE_INTEGER;
             return task.progress_target - (task.progress_current ?? 0);
         }
-        switch (task.interval_type) {
-            case "days":
-                return task.interval_value;
-            case "weeks":
-                return task.interval_value * 7;
-            case "months":
-                return task.interval_value * 30;
-            default:
-                return Number.MAX_SAFE_INTEGER;
-        }
+        const unitDays = INTERVAL_TYPE_DAYS[task.interval_type];
+        return unitDays ? task.interval_value * unitDays : Number.MAX_SAFE_INTEGER;
     }
 
     private _dueSortKey(task: Task): Date {

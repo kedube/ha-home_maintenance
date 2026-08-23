@@ -3,7 +3,7 @@ import type { ReactiveControllerHost } from "lit";
 
 import { localize } from '../../localize/localize';
 import { Task } from '../types';
-import { formatProgress, formatTriggerInterval } from '../util';
+import { formatProgress, formatTriggerInterval, isDatedTrigger } from '../compute';
 import { showToast } from '../toast';
 import { completeTask, removeTask } from '../data/websockets';
 import type { ConfirmOptions, HMConfirmDialog } from './confirm-dialog';
@@ -24,20 +24,21 @@ type RunWrapper = (action: () => Promise<void>) => Promise<void> | void;
 
 const completeMessage = (hass: HomeAssistant, task: Task): ConfirmOptions => {
     const lang = hass.language;
-    const isTime = (task.trigger_type ?? "time") === "time";
-    // formatTriggerInterval renders the time span for time-based tasks; for
+    const isDated = isDatedTrigger(task);
+    // formatTriggerInterval renders the time span for dated tasks; for
     // count/runtime tasks the progress-oriented message uses the target.
-    const interval = isTime ? formatTriggerInterval(task, lang) : formatProgress(task);
+    const interval = isDated ? formatTriggerInterval(task, lang) : formatProgress(task);
     return {
         heading: localize('panel.dialog.confirm_complete.title', lang),
         message: localize(
-            isTime
+            isDated
                 ? 'panel.dialog.confirm_complete.message'
                 : 'panel.dialog.confirm_complete.message_progress',
             lang, '{title}', task.title, '{interval}', interval,
         ),
         confirmLabel: localize('panel.dialog.confirm_complete.actions.confirm', lang),
         cancelLabel: localize('common.cancel', lang),
+        input: { label: localize('panel.dialog.confirm_complete.note_label', lang) },
         onConfirm: () => { /* set per-caller below */ },
     };
 };
@@ -52,9 +53,9 @@ export const confirmCompleteTask = (
     const lang = hass.language;
     dialog?.open({
         ...completeMessage(hass, task),
-        onConfirm: () => run(async () => {
+        onConfirm: (note) => run(async () => {
             try {
-                await completeTask(hass, task.id);
+                await completeTask(hass, task.id, note);
                 showToast(host, localize(
                     'panel.cards.current.alerts.complete_success', lang, '{title}', task.title,
                 ));

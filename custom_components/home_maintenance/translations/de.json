@@ -24,5 +24,15 @@
         }
       }
     }
+  },
+  "issues": {
+    "missing_watched_entity": {
+      "title": "Überwachte Entität für \"{title}\" fehlt",
+      "description": "Die Wartungsaufgabe \"{title}\" überwacht `{entity_id}`, aber diese Entität existiert nicht mehr. Der Zähler bzw. Laufzeitfortschritt der Aufgabe wird nicht weiterlaufen, bis die Entität zurückkehrt oder die Aufgabe auf eine andere Entität umgestellt wird."
+    },
+    "missing_notify_service": {
+      "title": "Benachrichtigungsdienst für \"{title}\" fehlt",
+      "description": "Die Wartungsaufgabe \"{title}\" sendet Benachrichtigungen über `{service}`, aber dieser Dienst ist nicht verfügbar. Benachrichtigungen für diese Aufgabe schlagen fehl, bis der Dienst zurückkehrt oder die Aufgabe auf einen anderen Benachrichtigungsdienst umgestellt wird."
+    }
   }
 }

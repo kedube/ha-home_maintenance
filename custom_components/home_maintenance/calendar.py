@@ -1,11 +1,12 @@
 """
 Calendar of upcoming Home Maintenance due dates.
 
-A single calendar entity exposes one all-day event per time-based task on its
-next due date. Count- and runtime-based tasks have no date and are excluded,
-matching the panel's Next Due column. Only the next occurrence per task is
-shown — future recurrences shift whenever a task is completed, so projecting
-them would put mostly-wrong dates on the calendar.
+A single calendar entity exposes all-day events for every dated (time- and
+fixed-date-based) task: the real next due date plus projected recurrences up
+to a one-year horizon. Projections assume each task is completed on its due
+date — completing early or late shifts a time-based task's future dates, so
+projections are refreshed on every task change. Count- and runtime-based
+tasks have no date and are excluded, matching the panel's Next Due column.
 """
 
 from __future__ import annotations
@@ -61,6 +62,11 @@ class HomeMaintenanceCalendar(CalendarEntity):
         self._attr_unique_id = f"{const.DOMAIN}_calendar"
         self._attr_name = const.NAME
         self._cached_events: list[CalendarEvent] | None = None
+        # The local day the cache was built on: projections depend on "today"
+        # (rolling horizon, past-repetition skipping), so a cache from
+        # yesterday is stale even when no task changed.
+        self._cache_day: object = None
+        self._fingerprint: tuple | None = None
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -69,30 +75,42 @@ class HomeMaintenanceCalendar(CalendarEntity):
 
     def _events(self) -> list[CalendarEvent]:
         """
-        Return one all-day event per dated task, soonest first.
+        Return all-day events per dated task, soonest first.
 
-        Cached until a task change invalidates it, so repeated reads (the
-        state property plus every calendar-card query) don't re-parse
-        next_due for every task each time.
+        Each dated task contributes its next due date plus projected
+        recurrences within the projection horizon.
+
+        Cached until a task change or a new local day invalidates it, so
+        repeated reads (the state property plus every calendar-card query)
+        don't re-project every task each time.
         """
-        if self._cached_events is not None:
+        today = dt_util.now().date()
+        if self._cached_events is not None and self._cache_day == today:
             return self._cached_events
+        self._cache_day = today
 
+        horizon = dt_util.start_of_local_day() + timedelta(
+            days=const.CALENDAR_PROJECTION_DAYS
+        )
         events = []
         for task in self._store.tasks.values():
-            due = get_trigger(task.trigger_type).next_due(self.hass, task)
-            if due is None:
-                continue
-            due_date = dt_util.as_local(due).date()
-            events.append(
-                CalendarEvent(
-                    start=due_date,
-                    end=due_date + timedelta(days=1),
-                    summary=task.title,
-                    description=task.description or None,
-                    uid=task.id,
-                )
+            occurrences = get_trigger(task.trigger_type).upcoming(
+                self.hass, task, horizon, const.CALENDAR_MAX_OCCURRENCES
             )
+            for index, occurrence in enumerate(occurrences):
+                due_date = dt_util.as_local(occurrence).date()
+                events.append(
+                    CalendarEvent(
+                        start=due_date,
+                        end=due_date + timedelta(days=1),
+                        summary=task.title,
+                        description=task.description or None,
+                        # The real next due date keeps the task id as its uid
+                        # (stable for existing automations); projections get a
+                        # per-date uid so every event stays unique.
+                        uid=task.id if index == 0 else f"{task.id}-{due_date}",
+                    )
+                )
         events.sort(key=lambda event: event.start)
         self._cached_events = events
         return events
@@ -124,11 +142,34 @@ class HomeMaintenanceCalendar(CalendarEntity):
             and event.end_datetime_local > start_date
         ]
 
+    def _task_fingerprint(self) -> tuple:
+        """
+        Summarize (cheaply) everything the events depend on.
+
+        One next_due per task — the signal fires on count increments and
+        runtime ticks too, and rebuilding the full multi-occurrence
+        projection for those would be pure waste.
+        """
+        return tuple(
+            sorted(
+                (task.id, due.isoformat(), task.title, task.description or "")
+                for task in self._store.tasks.values()
+                if (due := get_trigger(task.trigger_type).next_due(self.hass, task))
+                is not None
+            )
+        )
+
     @callback
     def _handle_tasks_changed(self) -> None:
-        # Invalidate the cache and only rewrite state if the visible next
-        # event actually changed — count increments, runtime ticks, and
-        # group renames fire this signal but don't affect the calendar.
+        # Skip entirely when nothing calendar-visible changed — count
+        # increments, runtime ticks, and group renames fire this signal but
+        # don't affect the calendar.
+        fingerprint = self._task_fingerprint()
+        if fingerprint == self._fingerprint:
+            return
+        self._fingerprint = fingerprint
+
+        # Rebuild, and only rewrite state if the visible next event changed.
         previous = self.event
         self._cached_events = None
         if _event_identity(self.event) != _event_identity(previous):

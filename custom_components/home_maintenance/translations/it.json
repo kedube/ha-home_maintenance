@@ -1,0 +1,38 @@
+{
+  "config": {
+    "flow_title": "Home Maintenance",
+    "step": {
+      "user": {
+        "title": "Configura Home Maintenance",
+        "description": "Configura l'integrazione Home Maintenance.",
+        "data": {
+          "admin_only": "Limita il pannello ai soli amministratori",
+          "sidebar_title": "Il nome mostrato nella barra laterale per questa integrazione."
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "È consentita una sola istanza di Home Maintenance."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "admin_only": "Limita il pannello ai soli amministratori",
+          "sidebar_title": "Il nome mostrato nella barra laterale per questa integrazione."
+        }
+      }
+    }
+  },
+  "issues": {
+    "missing_watched_entity": {
+      "title": "Entità monitorata per \"{title}\" mancante",
+      "description": "L'attività di manutenzione \"{title}\" monitora `{entity_id}`, ma quell'entità non esiste più. Il conteggio o l'avanzamento del tempo di funzionamento dell'attività non progredirà finché l'entità non tornerà disponibile o l'attività non verrà aggiornata per monitorare un'altra entità."
+    },
+    "missing_notify_service": {
+      "title": "Servizio di notifica per \"{title}\" mancante",
+      "description": "L'attività di manutenzione \"{title}\" invia notifiche tramite `{service}`, ma quel servizio non è disponibile. Le notifiche per questa attività non funzioneranno finché il servizio non tornerà disponibile o l'attività non verrà aggiornata per usare un altro servizio di notifica."
+    }
+  }
+}

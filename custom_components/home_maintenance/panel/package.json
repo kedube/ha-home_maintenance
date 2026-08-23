@@ -5,19 +5,20 @@
   "main": "main.js",
   "scripts": {
     "build": "esbuild src/main.ts src/todo-card.ts src/add-task-card.ts --bundle --outdir=dist --format=esm --target=es2020 --minify",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run"
   },
   "keywords": [],
   "author": "TJPoorman",
   "license": "ISC",
   "devDependencies": {
     "esbuild": "0.25.12",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
   },
   "dependencies": {
-    "lit": "3.3.3",
-    "custom-card-helpers": "1.9.0",
     "@mdi/js": "7.4.47",
-    "intl-messageformat": "9.13.0"
+    "custom-card-helpers": "1.9.0",
+    "intl-messageformat": "9.13.0",
+    "lit": "3.3.3"
   }
 }

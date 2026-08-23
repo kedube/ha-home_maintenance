@@ -1,6 +1,6 @@
 # Home Maintenance Tracker for Home Assistant
 
-A custom Home Assistant integration for tracking recurring home maintenance tasks — changing air filters, cleaning gutters, testing smoke alarms — directly inside Home Assistant. Each task gets its own entity that turns on when the task is due, a built-in sidebar panel (with task groups) manages everything, a bundled Lovelace card surfaces due tasks on any dashboard, and tasks can recur on a schedule, after a number of uses, or once a monitored sensor accumulates enough runtime.
+A custom Home Assistant integration for tracking recurring home maintenance tasks — changing air filters, cleaning gutters, testing smoke alarms — directly inside Home Assistant. Each task gets its own entity that turns on when the task is due, a built-in sidebar panel (with task groups) manages everything, a bundled Lovelace card surfaces due tasks on any dashboard, and a native todo list entity makes the tasks available to the built-in todo card, the companion apps, and voice assistants. Tasks can recur on a schedule, on fixed calendar dates, after a number of uses, or once a monitored sensor accumulates enough runtime, and every completion is recorded in a per-task history.
 
 Originally created by [@TJPoorman](https://github.com/TJPoorman/home_maintenance); this fork adds count- and runtime-based triggers, area support, task groups, task descriptions, a dashboard card, Home Assistant 2026.3 compatibility, and automated releases — incorporating contributions from [@Seidlm](https://github.com/Seidlm), [@select-star-from](https://github.com/select-star-from), and [@csteamengine](https://github.com/csteamengine).
 
@@ -20,6 +20,7 @@ Originally created by [@TJPoorman](https://github.com/TJPoorman/home_maintenance
 - [Dashboard card](#dashboard-card)
 - [Entities](#entities)
 - [Services](#services)
+- [Events](#events)
 - [Automation ideas](#automation-ideas)
 - [Screenshots](#screenshots)
 - [Troubleshooting](#troubleshooting)
@@ -92,10 +93,12 @@ Every task has a trigger type that controls when it becomes due:
 
 | Trigger | Due when… | Completing the task… |
 | --- | --- | --- |
-| **Time-based** (default) | the interval (days, weeks, or months) since the last-performed date has elapsed | resets the last-performed date |
+| **Time-based** (default) | the interval (days, weeks, months, or years) since the last-performed date has elapsed | resets the last-performed date |
+| **Fixed date** | a fixed calendar date arrives: an anchor date plus interval repetitions (e.g. every year on October 1) | rolls to the next anchored date |
 | **Count-based** | a monitored entity has turned on a threshold number of times | resets the counter to zero |
 | **Runtime-based** | a numeric sensor has accumulated a threshold amount since the last completion (e.g. hours of runtime, liters of consumption) | records the sensor's current value as the new baseline |
 
+- **Fixed-date** tasks are for seasonal work: pick an **anchor date** and a repeat interval, and the due dates stay anchored to the calendar — "winterize the sprinklers every year on October 1" stays October 1 no matter when you actually completed it last. A missed date stays due until you complete the task, after which the next anchored date takes over. (Completing *before* an anchor date does not skip it — the schedule never shifts.) When you create a fixed-date task and leave **Last performed** blank, the anchor date itself counts as pending, so a past anchor is due immediately; set **Last performed** explicitly if you already did the work this cycle.
 - **Count-based** tasks watch an entity you pick and count each `off → on` transition — e.g. "descale the coffee machine every 60 brews" counting a power switch. The panel shows progress as `current / threshold`. The counter can also be adjusted by [service call](#services).
 - **Runtime-based** tasks watch a numeric sensor and compare its growth against a threshold — e.g. "service the generator every 50 running hours" using a runtime counter sensor. If the source sensor is reset externally (its value drops below the recorded baseline), the baseline resets automatically so progress keeps making sense.
 
@@ -122,8 +125,8 @@ Tasks can be organized into named groups — *Kitchen*, *HVAC*, *Outdoors* — a
 Each task can send its own push notifications — enable them in the **Notifications** section of the add/edit forms:
 
 - **Notify service** — any `notify.*` service (for example `notify.mobile_app_your_phone`); leave empty to use `notify.notify`.
-- **Notify when** — send on *due*, *overdue*, or both. Count- and runtime-based tasks notify while due; time-based tasks distinguish the due day from overdue days.
-- **Days before due** — optional early reminder for time-based tasks (e.g. 3 days ahead).
+- **Notify when** — send on *due*, *overdue*, or both. Count- and runtime-based tasks notify while due; time-based and fixed-date tasks distinguish the due day from overdue days.
+- **Days before due** — optional early reminder for time-based and fixed-date tasks (e.g. 3 days ahead).
 - **Time of day** — when the automatic notification is sent (default 09:00).
 - **Open URL** — optional link attached to the notification's **Open** action (e.g. the appliance manual).
 
@@ -161,29 +164,39 @@ For a complete view combining the cards with templated summaries and core cards,
 
 Each task is a `binary_sensor` (grouped under one *Home Maintenance* device) that is **on** while the task is due. Attributes depend on the trigger type:
 
-| Attribute | Time | Count | Runtime |
-| --- | :-: | :-: | :-: |
-| `trigger_type`, `last_performed`, `description` | ✓ | ✓ | ✓ |
-| `tag_id` (when an NFC tag is assigned) | ✓ | ✓ | ✓ |
-| `interval_value`, `interval_type`, `next_due` | ✓ | | |
-| `current_count`, `count_threshold`, `count_entity_id` | | ✓ | |
-| `runtime_entity_id`, `runtime_threshold`, `runtime_baseline`, `runtime_current`, `runtime_delta` | | | ✓ |
+| Attribute | Time | Date | Count | Runtime |
+| --- | :-: | :-: | :-: | :-: |
+| `trigger_type`, `last_performed`, `description` | ✓ | ✓ | ✓ | ✓ |
+| `tag_id` (when an NFC tag is assigned) | ✓ | ✓ | ✓ | ✓ |
+| `interval_value`, `interval_type`, `next_due` | ✓ | ✓ | | |
+| `anchor_date` | | ✓ | | |
+| `current_count`, `count_threshold`, `count_entity_id` | | | ✓ | |
+| `runtime_entity_id`, `runtime_threshold`, `runtime_baseline`, `runtime_current`, `runtime_delta` | | | | ✓ |
+
+### Todo list
+
+A `todo.home_maintenance` entity mirrors the tasks as a native todo list: due tasks are **pending**, everything else shows as completed, and each dated task carries its next due date. That means the built-in [todo card](https://www.home-assistant.io/dashboards/todo-list/), the companion apps' todo widgets, and voice assistants ("what's on my home maintenance list?") work out of the box. Checking an item off completes the task — same as the panel's ✓ — and renaming an item or editing its description updates the task. Items can't be created, deleted, or reopened from the todo list (tasks need trigger configuration, and due state is computed from the schedule), so use the panel for those.
 
 ### Calendar
 
-A single `calendar.home_maintenance` entity shows one **all-day event per time-based task** on its next due date, so upcoming maintenance appears in the Calendar dashboard, calendar cards, and [calendar-trigger automations](https://www.home-assistant.io/docs/automation/trigger/#calendar-trigger), and can be queried with `calendar.get_events`. Count- and runtime-based tasks have no due date and are not shown. Only each task's next occurrence is listed (future dates shift whenever a task is completed); overdue tasks stay on their original due date.
+A single `calendar.home_maintenance` entity shows **all-day events for every time-based and fixed-date task**: the real next due date plus projected recurrences up to a year ahead, so upcoming maintenance appears in the Calendar dashboard, calendar cards, and [calendar-trigger automations](https://www.home-assistant.io/docs/automation/trigger/#calendar-trigger), and can be queried with `calendar.get_events`. Count- and runtime-based tasks have no due date and are not shown. Projections assume each task is completed on its due date (they re-flow whenever a task is completed); overdue tasks stay on their original due date. The event on a task's *actual* next due date keeps the task id as its uid, so uid-matching automations keep working.
+
+### Completion history
+
+Every completion — from the panel, a card, a service call, a tag scan, a notification action, or the todo list — is recorded in the task's history with the performed date, the actual completion time, and an optional note (the panel's complete dialog has a note field, and the services accept one). The last entries are shown in the edit dialog and the todo card's expanded view, history is included in the websocket task payloads for automations and templates, and each task keeps its most recent 50 entries.
 
 ## Services
 
 ### `home_maintenance.reset_last_performed`
 
-Marks a task as completed and updates its `last_performed` and `next_due`. Optionally back-date the completion with `performed_date`.
+Marks a task as completed and updates its `last_performed` and `next_due`. Optionally back-date the completion with `performed_date` and record a `note` in the task's [completion history](#completion-history).
 
 ```yaml
 action: home_maintenance.reset_last_performed
 data:
   entity_id: binary_sensor.clean_gutters
   performed_date: "2026-06-19"  # optional; defaults to today
+  note: "Hired the crew from Main St"  # optional history note
 ```
 
 ### `home_maintenance.increment_count`
@@ -227,9 +240,29 @@ data:
   entity_id: binary_sensor.change_hvac_filter
 ```
 
+## Events
+
+Two bus events are fired for event-triggered automations:
+
+- **`home_maintenance_task_completed`** — on every completion (panel, card, service, tag scan, notification action, todo list). Data: `task_id`, `entity_id`, `title`, `trigger_type`, `group_id`, `performed` (date), `note`.
+- **`home_maintenance_task_due`** — when a task's entity flips to due while Home Assistant is running (a task already due at startup does not re-fire). Data: `task_id`, `entity_id`, `title`, `trigger_type`, `group_id`.
+
+```yaml
+automation:
+  - alias: "Log completed maintenance"
+    triggers:
+      - trigger: event
+        event_type: home_maintenance_task_completed
+    actions:
+      - action: logbook.log
+        data:
+          name: "{{ trigger.event.data.title }}"
+          message: "completed{{ ' — ' + trigger.event.data.note if trigger.event.data.note }}"
+```
+
 ## Automation ideas
 
-**Get notified when a task becomes due.** Built-in per-task [notifications](#notifications) cover the common case. For full control — custom copy, conditions, or other actions — every task is a binary sensor, so a state trigger is all it takes:
+**Get notified when a task becomes due.** Built-in per-task [notifications](#notifications) cover the common case. For full control — custom copy, conditions, or other actions — every task is a binary sensor, so a state trigger is all it takes (or use the [`home_maintenance_task_due` event](#events)):
 
 ```yaml
 automation:
@@ -263,6 +296,10 @@ automation:
 
 **Non-admin users can't see the panel.** That's the **Admin only** option (on by default) — turn it off via **Configure** on the integration entry. Task entities are visible to everyone either way.
 
+**A counter or runtime task stopped advancing, or notifications stopped arriving.** Check **Settings → System → Repairs** — the integration raises an issue when a task's watched entity no longer exists or its notify service is gone, and clears it automatically once the reference is valid again.
+
+**Filing an issue?** Attach the integration's diagnostics (Settings → Devices & Services → Home Maintenance → ⋮ → **Download diagnostics**) — task descriptions, notes, URLs, and tag ids are redacted automatically.
+
 ## Project scope
 
 This integration fills a simple gap: recurring tasks without stacks of helpers and automations. It is intentionally minimal — focused on task tracking. Home Assistant already provides powerful dashboards, automations, and alerts; this integration complements them rather than replacing them, so feature requests that duplicate native functionality may be declined.
@@ -289,7 +326,10 @@ The sidebar panel is a Lit + TypeScript app in `custom_components/home_maintenan
 cd custom_components/home_maintenance/panel
 npm ci
 npm run build   # regenerates dist/main.js, todo-card.js, add-task-card.js
+npm test        # vitest unit tests: date math, bucketing, form validation, translations
 ```
+
+The panel and cards are translated via `panel/localize/languages/*.json` and the config flow via `custom_components/home_maintenance/translations/*.json` (currently English, German, French, Spanish, Italian, Dutch, Polish, and Brazilian Portuguese). To add a language, copy both `en.json` files, translate every key, and register the panel file in `panel/localize/localize.ts` — the vitest suite fails if any language's keys drift from English.
 
 The panel only uses current Home Assistant components (`ha-selector`, `ha-form`, `ha-button`, `ha-dialog`) — legacy elements (`mwc-*`, `ha-textfield`, `ha-formfield`, `ha-md-*`, `paper-*`) break silently when Home Assistant removes them, and CI rejects them.
 
@@ -307,7 +347,7 @@ For a tour of how the pieces fit together — the task store, dispatcher signals
 
 ### CI and releases
 
-Every push and pull request runs the **CI** workflow: HACS validation, hassfest, ruff, pytest on Python 3.13 and 3.14 (with an 85% coverage gate), a panel type-check + build that fails if the committed bundles drift from the sources or if legacy Home Assistant components reappear, and the browser smoke test driving the real panel headlessly (its screenshot is uploaded as a run artifact). A weekly, non-blocking **HA next** job additionally runs the pytest suite *and* the smoke test against the newest Home Assistant pre-release as an early warning for upstream breaking changes, and dependabot keeps the panel's npm dependencies fresh (its PRs get the bundle rebuilt automatically). When CI passes on `main`, the **Release** workflow automatically bumps the patch version (in `const.py` and `manifest.json` together), rotates the `Unreleased` section of [CHANGELOG.md](CHANGELOG.md) into the release notes, tags `vX.Y.Z`, and publishes a GitHub release with the HACS zip attached. Minor/major bumps (or a re-release) can be triggered manually from the workflow's **Run workflow** menu.
+Every push and pull request runs the **CI** workflow: HACS validation, hassfest, ruff, pytest on Python 3.13 and 3.14 (with an 85% coverage gate), a panel type-check, vitest unit-test run, and build that fails if the committed bundles drift from the sources or if legacy Home Assistant components reappear, and the browser smoke test driving the real panel headlessly (its screenshot is uploaded as a run artifact). A weekly, non-blocking **HA next** job additionally runs the pytest suite *and* the smoke test against the newest Home Assistant pre-release as an early warning for upstream breaking changes, and dependabot keeps the panel's npm dependencies fresh (its PRs get the bundle rebuilt automatically). When CI passes on `main`, the **Release** workflow automatically bumps the patch version (in `const.py` and `manifest.json` together), rotates the `Unreleased` section of [CHANGELOG.md](CHANGELOG.md) into the release notes, tags `vX.Y.Z`, and publishes a GitHub release with the HACS zip attached. Minor/major bumps (or a re-release) can be triggered manually from the workflow's **Run workflow** menu.
 
 When contributing, add a line describing your change under `## Unreleased` in [CHANGELOG.md](CHANGELOG.md) — it becomes the *Highlights* section of the next release's notes. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guidelines.
 

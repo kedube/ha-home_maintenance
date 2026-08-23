@@ -1,7 +1,8 @@
-import { LitElement, html } from "lit";
-import { state } from "lit/decorators.js";
+import { LitElement, html, css, nothing } from "lit";
+import { query, state } from "lit/decorators.js";
 
 import { commonStyle } from '../styles';
+import { MAX_TEXT_LENGTH } from '../types';
 import { dialogFooter } from '../util';
 
 export interface ConfirmOptions {
@@ -11,7 +12,10 @@ export interface ConfirmOptions {
     cancelLabel: string;
     /** Style the confirm button as a destructive action. */
     destructive?: boolean;
-    onConfirm: () => void;
+    /** Optional free-text input (e.g. a completion note); its value is
+     *  passed to onConfirm. */
+    input?: { label: string; placeholder?: string };
+    onConfirm: (inputValue?: string) => void;
 }
 
 /**
@@ -21,6 +25,8 @@ export interface ConfirmOptions {
  */
 class HMConfirmDialog extends LitElement {
     @state() private _opts: ConfirmOptions | null = null;
+
+    @query('.confirm-input') private _input?: HTMLInputElement;
 
     public open(opts: ConfirmOptions) {
         this._opts = opts;
@@ -32,8 +38,9 @@ class HMConfirmDialog extends LitElement {
 
     private _handleConfirm() {
         const onConfirm = this._opts?.onConfirm;
+        const value = this._input?.value.trim() || undefined;
         this._close();
-        onConfirm?.();
+        onConfirm?.(value);
     }
 
     private _renderButtons() {
@@ -67,12 +74,45 @@ class HMConfirmDialog extends LitElement {
             >
                 <p>${this._opts.message}</p>
 
+                ${this._opts.input ? html`
+                    <label class="confirm-input-label">
+                        ${this._opts.input.label}
+                        <input
+                            class="confirm-input"
+                            type="text"
+                            maxlength=${MAX_TEXT_LENGTH}
+                            placeholder=${this._opts.input.placeholder ?? ""}
+                        />
+                    </label>
+                ` : nothing}
+
                 ${dialogFooter(this._renderButtons())}
             </ha-dialog>
         `;
     }
 
-    static styles = commonStyle;
+    static styles = [commonStyle, css`
+        .confirm-input-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--secondary-text-color);
+        }
+
+        .confirm-input {
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
+            margin-top: 4px;
+            padding: 8px 10px;
+            font-size: 14px;
+            color: var(--primary-text-color);
+            background: var(--secondary-background-color);
+            border: 1px solid var(--divider-color);
+            border-radius: 8px;
+            outline: none;
+        }
+    `];
 }
 
 if (!customElements.get('hm-confirm-dialog')) customElements.define('hm-confirm-dialog', HMConfirmDialog)

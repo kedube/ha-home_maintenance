@@ -5,7 +5,16 @@ import { formatDateNumeric } from "custom-card-helpers";
 
 import { localize } from '../localize/localize';
 import { loadConfigDashboard } from './helpers';
-import { Debouncer, formatProgress, formatTriggerInterval, parseStoredDate } from './util';
+import {
+    Debouncer,
+    TaskSchedule,
+    computeTaskSchedule,
+    formatDaysLabel,
+    formatTriggerInterval,
+    isDatedTrigger,
+    parseStoredDate,
+} from './compute';
+import { historyStyles, renderHistoryList } from './util';
 import { Task } from './types';
 import {
     loadGroups,
@@ -23,14 +32,8 @@ import type { HMConfirmDialog } from './components/confirm-dialog';
  * backend-computed trigger state (due / next_due / progress) of this fork.
  */
 
-type TaskStatus = "overdue" | "due_soon" | "upcoming";
-
-interface ComputedTask {
+interface ComputedTask extends TaskSchedule {
     raw: Task;
-    nextDue: Date | null;
-    daysUntilDue: number | null;
-    status: TaskStatus;
-    completedToday: boolean;
 }
 
 interface CardConfig {
@@ -127,32 +130,8 @@ class HomeMaintenanceTodoCard extends LitElement {
     // --- Compute ---
 
     private _computeTask(task: Task): ComputedTask {
-        const now = new Date();
-        now.setHours(0, 0, 0, 0);
-
         const dueSoonDays = this._config.due_soon_days ?? DEFAULT_CONFIG.due_soon_days!;
-        const isTime = (task.trigger_type ?? "time") === "time";
-
-        let nextDue: Date | null = null;
-        let daysUntilDue: number | null = null;
-        if (isTime && task.next_due) {
-            // Parse the calendar date, not the instant: new Date(iso) would
-            // shift the backend's local midnight through the browser TZ.
-            nextDue = parseStoredDate(task.next_due);
-            daysUntilDue = Math.ceil((nextDue.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-        }
-
-        let status: TaskStatus;
-        if (task.due) status = "overdue";
-        else if (daysUntilDue !== null && daysUntilDue <= dueSoonDays) status = "due_soon";
-        else status = "upcoming";
-
-        let completedToday = false;
-        if (task.last_performed) {
-            completedToday = parseStoredDate(task.last_performed).getTime() === now.getTime();
-        }
-
-        return { raw: task, nextDue, daysUntilDue, status, completedToday };
+        return { raw: task, ...computeTaskSchedule(task, dueSoonDays) };
     }
 
     private get _filteredTasks(): ComputedTask[] {
@@ -178,18 +157,7 @@ class HomeMaintenanceTodoCard extends LitElement {
     // --- Helpers ---
 
     private _formatDaysLabel(ct: ComputedTask): string {
-        const task = ct.raw;
-        if ((task.trigger_type ?? "time") !== "time") {
-            return formatProgress(task);
-        }
-        const days = ct.daysUntilDue;
-        if (days === null) return "";
-        if (days === 0) return "Due today";
-        if (days < 0) {
-            const abs = Math.abs(days);
-            return abs === 1 ? "1 day overdue" : `${abs} days overdue`;
-        }
-        return days === 1 ? "Due in 1 day" : `${days} days left`;
+        return formatDaysLabel(ct, ct.raw, this.hass!.language);
     }
 
     private _formatDate(date: Date | null): string {
@@ -238,6 +206,7 @@ class HomeMaintenanceTodoCard extends LitElement {
 
     render() {
         if (!this.hass) return html``;
+        const lang = this.hass.language;
 
         const filtered = this._filteredTasks;
         const maxItems = this._config.max_items ?? 0;
@@ -268,7 +237,7 @@ class HomeMaintenanceTodoCard extends LitElement {
                         <ha-icon-button
                             class="panel-link"
                             @click=${this._openPanel}
-                            title="Open full panel"
+                            title=${localize('card.todo.open_panel', lang)}
                         >
                             <ha-icon icon="mdi:open-in-new"></ha-icon>
                         </ha-icon-button>
@@ -283,7 +252,7 @@ class HomeMaintenanceTodoCard extends LitElement {
                                 type="text"
                                 .value=${this._searchQuery}
                                 @input=${(e: Event) => this._searchQuery = (e.target as HTMLInputElement).value}
-                                placeholder="Search tasks..."
+                                placeholder=${localize('card.todo.search', lang)}
                             />
                             ${this._searchQuery ? html`
                                 <ha-icon-button @click=${() => this._searchQuery = ""}>
@@ -297,7 +266,7 @@ class HomeMaintenanceTodoCard extends LitElement {
                                 .value=${this._groupFilter}
                                 @change=${(e: Event) => this._groupFilter = (e.target as HTMLSelectElement).value}
                             >
-                                <option value="">All groups</option>
+                                <option value="">${localize('card.todo.all_groups', lang)}</option>
                                 ${this._groups.map((group) => html`
                                     <option value=${group} ?selected=${this._groupFilter === group}>${group}</option>
                                 `)}
@@ -310,7 +279,7 @@ class HomeMaintenanceTodoCard extends LitElement {
                     ${overdue.length > 0 ? html`
                         <div class="group-header group-overdue">
                             <span class="group-dot dot-overdue"></span>
-                            OVERDUE
+                            ${localize('card.todo.overdue', lang)}
                             <span class="group-count">(${overdue.length})</span>
                         </div>
                         ${overdue.map((t) => this._renderTaskCard(t))}
@@ -319,7 +288,7 @@ class HomeMaintenanceTodoCard extends LitElement {
                     ${dueSoon.length > 0 ? html`
                         <div class="group-header group-due-soon">
                             <span class="group-dot dot-due-soon"></span>
-                            DUE SOON
+                            ${localize('card.todo.due_soon', lang)}
                             <span class="group-count">(${dueSoon.length})</span>
                         </div>
                         ${dueSoon.map((t) => this._renderTaskCard(t))}
@@ -328,14 +297,14 @@ class HomeMaintenanceTodoCard extends LitElement {
                     ${upcoming.length > 0 ? html`
                         <div class="group-header group-upcoming">
                             <span class="group-dot dot-upcoming"></span>
-                            UPCOMING
+                            ${localize('card.todo.upcoming', lang)}
                             <span class="group-count">(${upcoming.length})</span>
                         </div>
                         ${upcoming.map((t) => this._renderTaskCard(t))}
                     ` : nothing}
 
                     ${allTasks.length === 0 ? html`
-                        <div class="empty">No tasks found</div>
+                        <div class="empty">${localize('card.todo.no_tasks', lang)}</div>
                     ` : nothing}
                 </div>
             </ha-card>
@@ -346,9 +315,10 @@ class HomeMaintenanceTodoCard extends LitElement {
 
     private _renderTaskCard(ct: ComputedTask): TemplateResult {
         const task = ct.raw;
+        const lang = this.hass!.language;
         const isExpanded = this._expandedTasks.has(task.id);
         const isCompleting = this._completing.has(task.id);
-        const isTime = (task.trigger_type ?? "time") === "time";
+        const isDated = isDatedTrigger(task);
 
         return html`
             <div class="task-card ${ct.status} ${isCompleting ? "completing" : ""} ${ct.completedToday ? "done-today" : ""}">
@@ -358,7 +328,7 @@ class HomeMaintenanceTodoCard extends LitElement {
                             <ha-icon class="task-icon done-check" icon="mdi:check-circle"></ha-icon>
                         ` : task.icon ? html`<ha-icon class="task-icon" .icon=${task.icon}></ha-icon>` : nothing}
                         <div class="task-info">
-                            <div class="task-title">${task.title}${ct.completedToday ? html`<span class="done-badge">Done</span>` : nothing}</div>
+                            <div class="task-title">${task.title}${ct.completedToday ? html`<span class="done-badge">${localize('card.todo.done', lang)}</span>` : nothing}</div>
                             <div class="task-meta">
                                 <span class="task-interval">${formatTriggerInterval(task, this.hass!.language)}</span>
                                 ${task.group_id ? html`
@@ -369,7 +339,7 @@ class HomeMaintenanceTodoCard extends LitElement {
                     </div>
                     <div class="task-right">
                         <div class="task-due-info">
-                            ${isTime ? html`
+                            ${isDated ? html`
                                 <span class="due-date">${this._formatDate(ct.nextDue)}</span>
                             ` : nothing}
                             <span class="due-days ${ct.status}">${this._formatDaysLabel(ct)}</span>
@@ -377,20 +347,20 @@ class HomeMaintenanceTodoCard extends LitElement {
                         <div class="task-actions">
                             <ha-icon-button
                                 @click=${(e: Event) => { e.stopPropagation(); this._completeTask(task); }}
-                                title="Complete"
+                                title=${localize('card.todo.complete', lang)}
                                 ?disabled=${isCompleting}
                             >
                                 <ha-icon icon="mdi:check-circle-outline"></ha-icon>
                             </ha-icon-button>
                             <ha-icon-button
                                 @click=${(e: Event) => { e.stopPropagation(); this._openPanel(); }}
-                                title="Edit in panel"
+                                title=${localize('card.todo.edit', lang)}
                             >
                                 <ha-icon icon="mdi:pencil"></ha-icon>
                             </ha-icon-button>
                             <ha-icon-button
                                 @click=${(e: Event) => { e.stopPropagation(); this._removeTask(task.id); }}
-                                title="Remove"
+                                title=${localize('card.todo.remove', lang)}
                             >
                                 <ha-icon icon="mdi:delete"></ha-icon>
                             </ha-icon-button>
@@ -407,23 +377,32 @@ class HomeMaintenanceTodoCard extends LitElement {
                     <div class="task-expanded">
                         ${task.description ? html`
                             <div class="task-section">
-                                <div class="section-label">Description</div>
+                                <div class="section-label">${localize('card.todo.description', lang)}</div>
                                 <div class="section-content notes-content">${task.description}</div>
                             </div>
                         ` : nothing}
 
                         <div class="task-section">
-                            <div class="section-label">Last Performed</div>
+                            <div class="section-label">${localize('card.todo.last_performed', lang)}</div>
                             <div class="section-content">
                                 ${task.last_performed ? this._formatStoredDate(task.last_performed) : "-"}
                             </div>
                         </div>
 
-                        ${!isTime ? html`
+                        ${!isDated ? html`
                             <div class="task-section">
-                                <div class="section-label">Progress</div>
+                                <div class="section-label">${localize('card.todo.progress', lang)}</div>
                                 <div class="section-content">
                                     ${task.progress_current ?? 0} / ${task.progress_target ?? 0}
+                                </div>
+                            </div>
+                        ` : nothing}
+
+                        ${task.history?.length ? html`
+                            <div class="task-section">
+                                <div class="section-label">${localize('card.todo.history', lang)}</div>
+                                <div class="section-content">
+                                    ${renderHistoryList(task.history, 3, this.hass!.locale)}
                                 </div>
                             </div>
                         ` : nothing}
@@ -433,7 +412,7 @@ class HomeMaintenanceTodoCard extends LitElement {
         `;
     }
 
-    static styles = css`
+    static styles = [historyStyles, css`
         :host {
             --todo-overdue: var(--error-color, #db4437);
             --todo-due-soon: var(--warning-color, #ffa726);
@@ -531,6 +510,7 @@ class HomeMaintenanceTodoCard extends LitElement {
             font-size: 12px;
             font-weight: 700;
             letter-spacing: 0.5px;
+            text-transform: uppercase;
             padding: 12px 16px 6px;
         }
 
@@ -758,7 +738,7 @@ class HomeMaintenanceTodoCard extends LitElement {
                 min-width: unset;
             }
         }
-    `;
+    `];
 }
 
 // --- Config editor ---

@@ -13,11 +13,13 @@ import voluptuous as vol
 
 from .const import MAX_STRING_LENGTH, NOTIFICATION_URL_SCHEMES, NOTIFY_WHEN_OPTIONS
 
-TRIGGER_TYPES = ["time", "count", "runtime"]
-INTERVAL_TYPES = ["days", "weeks", "months"]
+TRIGGER_TYPES = ["time", "date", "count", "runtime"]
+INTERVAL_TYPES = ["days", "weeks", "months", "years"]
 
-_bounded_str = vol.All(vol.Coerce(str), vol.Length(max=MAX_STRING_LENGTH))
-_bounded_str_or_none = vol.Any(None, _bounded_str)
+# Shared length-bounded string validators; also reused by the websocket
+# layer for free-text fields outside the task-field map (e.g. history notes).
+bounded_str = vol.All(vol.Coerce(str), vol.Length(max=MAX_STRING_LENGTH))
+bounded_str_or_none = vol.Any(None, bounded_str)
 
 
 def _notification_url(value: object) -> str | None:
@@ -39,23 +41,24 @@ def _notification_url(value: object) -> str | None:
 # add_task schema, UPDATES_SCHEMA, and ALLOWED_UPDATE_FIELDS. "labels" is
 # handled separately (it lives on the entity registry, not the task).
 TASK_FIELD_VALIDATORS: dict[str, object] = {
-    "title": _bounded_str,
+    "title": bounded_str,
     "trigger_type": vol.In(TRIGGER_TYPES),
     "interval_value": vol.Coerce(int),
     "interval_type": vol.In(INTERVAL_TYPES),
     "last_performed": vol.Any(str, None),
-    "icon": _bounded_str_or_none,
-    "tag_id": _bounded_str_or_none,
-    "area_id": _bounded_str_or_none,
-    "description": _bounded_str_or_none,
-    "count_entity_id": _bounded_str_or_none,
+    "anchor_date": bounded_str_or_none,
+    "icon": bounded_str_or_none,
+    "tag_id": bounded_str_or_none,
+    "area_id": bounded_str_or_none,
+    "description": bounded_str_or_none,
+    "count_entity_id": bounded_str_or_none,
     "count_threshold": vol.Coerce(int),
-    "runtime_entity_id": _bounded_str_or_none,
+    "runtime_entity_id": bounded_str_or_none,
     "runtime_threshold": vol.Coerce(float),
-    "group_id": _bounded_str_or_none,
+    "group_id": bounded_str_or_none,
     "notifications_enabled": bool,
-    "notification_target": _bounded_str_or_none,
-    "notification_time": _bounded_str,
+    "notification_target": bounded_str_or_none,
+    "notification_time": bounded_str,
     "notification_url": _notification_url,
     "notify_when": vol.In(NOTIFY_WHEN_OPTIONS),
     "notify_days_before_due": vol.Any(None, vol.Coerce(int)),
