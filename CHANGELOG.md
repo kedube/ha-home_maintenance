@@ -4,7 +4,7 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
-## Unreleased
+## 1.5.22 — 2026-08-23
 
 - Added: a `todo.home_maintenance` todo list entity mirroring the tasks —
   due tasks are pending, checking one off completes it, and renaming or
