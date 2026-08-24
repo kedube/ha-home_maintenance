@@ -64,7 +64,9 @@ class HMTaskTable extends LitElement {
                 main: true,
                 showNarrow: true,
                 sortable: true,
-                filterable: true,
+                // Not filterable: a filterable column makes ha-data-table
+                // render its own search box (one per group section), which
+                // duplicates the panel's toolbar search above the table.
                 grows: true,
                 extraTemplate: (task: any) => {
                     const labels = this._taskLabels.get(task.id);

@@ -13,6 +13,7 @@ import {
     computeISODate,
     descriptionField,
     emptyTaskFormData,
+    lastPerformedField,
     notificationFieldList,
     optionalFieldList,
     taskFormToAddPayload,
@@ -95,6 +96,7 @@ class HMTaskForm extends LitElement {
                 class="extras-panel"
             >
                 <div class="fields-grid">
+                    ${this._renderField(lastPerformedField)}
                     ${optionalFieldList(this.groups, this.hass.language).map(this._renderField)}
                     ${this._renderField(descriptionField(false))}
                 </div>

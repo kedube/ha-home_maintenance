@@ -13,6 +13,7 @@ import {
     computeISODate,
     descriptionField,
     emptyTaskFormData,
+    lastPerformedField,
     notificationFieldList,
     optionalFieldList,
     taskFormToUpdates,
@@ -123,6 +124,7 @@ class HMEditDialog extends LitElement {
             >
                 <div class="fields-grid">
                     ${basicFields(this._formData, lang).map(this._renderField)}
+                    ${this._renderField(lastPerformedField)}
                 </div>
 
                 <div class="section-label">

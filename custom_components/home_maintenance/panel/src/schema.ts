@@ -158,14 +158,21 @@ export const groupSelector = (groups: string[], lang: string) => ({
 
 /**
  * Main task fields, rendered on one line in the add form (wraps on narrow
- * screens): title | trigger type | the trigger's two fields | last performed.
+ * screens): title | trigger type | the trigger's two fields.
  */
 export const basicFields = (formData: TaskFormData, lang: string): any[] => [
     { name: "title", required: true, selector: { text: {} }, },
     triggerTypeSelector(lang),
     ...triggerFields(formData, lang),
-    { name: "last_performed", selector: { date: {} }, },
 ];
+
+/**
+ * Last performed is optional on creation (blank = today, or anchor-pending
+ * for fixed-date tasks), so the add form tucks it into Optional settings;
+ * the edit dialog keeps it on the main row, where adjusting the last
+ * completion date is a primary action.
+ */
+export const lastPerformedField = { name: "last_performed", selector: { date: {} } };
 
 /** Optional fields, rendered left-to-right on the expansion panel's line. */
 export const optionalFieldList = (groups: string[], lang: string): any[] => [

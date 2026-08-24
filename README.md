@@ -87,7 +87,7 @@ Submitting reloads the integration automatically, so changes — including a new
 
 Open **Home Maintenance** from the sidebar. The panel stacks three cards in a single column:
 
-- **Create New Task** — the main fields (title, trigger type, the trigger's two fields, last performed) and the **Add Task** button sit on one line; everything else lives behind the collapsed **Optional settings** row. On narrow screens the fields wrap automatically.
+- **Create New Task** — the main fields (title, trigger type, the trigger's two fields) and the **Add Task** button sit on one line; everything else — including **Last performed**, which defaults to today when left blank — lives behind the collapsed **Optional settings** row. On narrow screens the fields wrap automatically.
 - **Current Tasks** — every task with its interval, last-performed date, and next due date (overdue dates highlighted), one section per [group](#task-groups). A toolbar above the table offers [search and label filtering](#search-and-label-filtering) plus the [template library and CSV import/export](#template-library-and-csv-importexport). Each row has a ✓ button to mark the task complete (after a confirmation, since completing resets the schedule or counter) and a menu for editing (including the title), moving the task to a group, or deleting it.
 - **Groups** — create, rename, and delete [task groups](#task-groups).
 

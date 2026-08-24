@@ -15,8 +15,9 @@ Highlights block of the GitHub release notes.
   all tasks to `home_maintenance_tasks.csv` — also a migration path from
   other maintenance-tracker integrations.
 - Added: search and label filtering in the panel — a search box over task
-  titles/descriptions plus clickable label chips (OR logic) above the task
-  table.
+  titles, descriptions, and group names plus clickable label chips (OR
+  logic) above the task table. Replaces the data table's built-in
+  per-section search box.
 - Added: seasonal tasks. Time-based tasks can be restricted to **active
   months** (e.g. April–October for lawn care): due dates landing out of
   season move to the start of the next season, and the task is never
@@ -53,6 +54,9 @@ Highlights block of the GitHub release notes.
   require an admin user (automations and scripts are unaffected).
 - Changed: CSV export neutralizes spreadsheet formula injection (a leading
   `=` `+` `-` `@` in a title/description is prefixed with an apostrophe).
+- Changed: the create-task form moved **Last performed** into Optional
+  settings (it defaults to today when blank); the edit dialog keeps it on
+  the main row.
 
 ## 1.5.22 — 2026-08-23
 
