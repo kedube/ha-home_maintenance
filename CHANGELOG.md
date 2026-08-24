@@ -4,7 +4,7 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
-## Unreleased
+## 1.5.23 — 2026-08-24
 
 - Added: a built-in template library — 90+ pre-built maintenance tasks
   (HVAC, plumbing, electrical, appliances, interior, exterior, yard, safety,
