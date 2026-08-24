@@ -20,7 +20,8 @@
       "init": {
         "data": {
           "admin_only": "Restreindre le panneau aux administrateurs uniquement",
-          "sidebar_title": "Le nom affiché dans la barre latérale pour cette intégration."
+          "sidebar_title": "Le nom affiché dans la barre latérale pour cette intégration.",
+          "max_history_entries": "Entrées d'historique conservées par tâche (0 = illimité)"
         }
       }
     }

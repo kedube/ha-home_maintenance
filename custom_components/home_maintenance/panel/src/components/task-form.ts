@@ -31,6 +31,11 @@ class HMTaskForm extends LitElement {
     @state() private _formData: TaskFormData = emptyTaskFormData();
     private _advancedOpen = false;
 
+    /** Prefill the form (used by the template library); keeps other fields. */
+    public prefill(values: Partial<TaskFormData>) {
+        this._formData = { ...this._formData, ...values };
+    }
+
     private async _handleAddTaskClick() {
         if (!validateTaskForm(this._formData)) {
             showToast(this, localize("panel.cards.new.alerts.required", this.hass!.language));

@@ -86,6 +86,9 @@ class NotificationManager:
             self.hass.bus.async_listen(
                 MOBILE_APP_ACTION_EVENT, self._handle_mobile_action
             ),
+            self.hass.bus.async_listen(
+                const.EVENT_TASK_COMPLETED, self._handle_task_completed
+            ),
         ]
         self._schedule_processing()
         return unsubs
@@ -191,6 +194,50 @@ class NotificationManager:
             last_notification_kind=None,
             last_notification_date=None,
         )
+
+    async def _handle_task_completed(self, event: Event) -> None:
+        """
+        Dismiss a task's outstanding mobile notification when it is completed.
+
+        Companion-app notify targets support clearing by tag with a
+        clear_notification message; other notify services would deliver it as
+        literal text, so dismissal is limited to mobile_app targets. The
+        recorded notification state is cleared either way, so a task that
+        becomes due again later re-notifies.
+        """
+        task = self._store.tasks.get(event.data.get("task_id"))
+        if task is None or not task.notifications_enabled:
+            return
+        if task.last_notification_date is None:
+            return
+
+        self._store.update_notification_state(
+            task.id,
+            last_notification_kind=None,
+            last_notification_date=None,
+        )
+
+        domain, service = resolve_notify_service(task.notification_target)
+        if domain != "notify" or not service.startswith("mobile_app"):
+            return
+        try:
+            await self.hass.services.async_call(
+                domain,
+                service,
+                {
+                    "message": "clear_notification",
+                    "data": {"tag": f"{const.DOMAIN}_{task.id}"},
+                },
+                blocking=True,
+            )
+        except HomeAssistantError as err:
+            _LOGGER.debug(
+                "Could not dismiss notification for task %s via %s.%s: %s",
+                task.id,
+                domain,
+                service,
+                err,
+            )
 
     async def _handle_mobile_action(self, event: Event) -> None:
         """Handle complete/snooze actions from mobile app notifications."""

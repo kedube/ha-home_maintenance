@@ -20,7 +20,8 @@
       "init": {
         "data": {
           "admin_only": "Limita il pannello ai soli amministratori",
-          "sidebar_title": "Il nome mostrato nella barra laterale per questa integrazione."
+          "sidebar_title": "Il nome mostrato nella barra laterale per questa integrazione.",
+          "max_history_entries": "Voci di cronologia conservate per attività (0 = illimitato)"
         }
       }
     }

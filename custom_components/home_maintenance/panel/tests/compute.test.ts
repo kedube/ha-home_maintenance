@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
     Debouncer,
     computeTaskSchedule,
+    filterTasks,
     formatDaysLabel,
     formatProgress,
     formatTimeInterval,
@@ -174,5 +175,52 @@ describe('Debouncer', () => {
         vi.advanceTimersByTime(1000);
         expect(fn).not.toHaveBeenCalled();
         vi.useRealTimers();
+    });
+});
+
+describe('filterTasks', () => {
+    const registry = [
+        { entity_id: 'binary_sensor.a', unique_id: 'a', platform: 'home_maintenance', labels: ['l1'] },
+        { entity_id: 'binary_sensor.b', unique_id: 'b', platform: 'home_maintenance', labels: ['l2'] },
+        { entity_id: 'binary_sensor.c', unique_id: 'c', platform: 'home_maintenance', labels: [] },
+    ];
+    const tasks = [
+        baseTask({ id: 'a', title: 'Clean Gutters', description: 'roof work' }),
+        baseTask({ id: 'b', title: 'Replace Filter', description: null }),
+        baseTask({ id: 'c', title: 'Mow Lawn', description: 'yard' }),
+    ];
+
+    it('returns the same array when no filter is active', () => {
+        expect(filterTasks(tasks, registry as any, '', [])).toBe(tasks);
+    });
+
+    it('matches title and description case-insensitively', () => {
+        expect(filterTasks(tasks, registry as any, 'FILTER', []).map((t) => t.id)).toEqual(['b']);
+        expect(filterTasks(tasks, registry as any, 'roof', []).map((t) => t.id)).toEqual(['a']);
+    });
+
+    it('filters by any selected label (OR logic)', () => {
+        expect(filterTasks(tasks, registry as any, '', ['l1']).map((t) => t.id)).toEqual(['a']);
+        expect(filterTasks(tasks, registry as any, '', ['l1', 'l2']).map((t) => t.id)).toEqual(['a', 'b']);
+    });
+
+    it('combines query and labels with AND', () => {
+        expect(filterTasks(tasks, registry as any, 'clean', ['l2'])).toEqual([]);
+        expect(filterTasks(tasks, registry as any, 'clean', ['l1']).map((t) => t.id)).toEqual(['a']);
+    });
+
+    it('excludes unlabeled tasks when labels are selected', () => {
+        expect(filterTasks(tasks, registry as any, '', ['l1']).find((t) => t.id === 'c')).toBeUndefined();
+    });
+});
+
+describe('filterTasks group matching', () => {
+    it('matches the group name like the todo card search', () => {
+        const registry: any[] = [];
+        const tasks = [
+            baseTask({ id: 'g1', title: 'Task A', group_id: 'Kitchen' }),
+            baseTask({ id: 'g2', title: 'Task B', group_id: 'Garage' }),
+        ];
+        expect(filterTasks(tasks, registry, 'kitchen', []).map((t) => t.id)).toEqual(['g1']);
     });
 });

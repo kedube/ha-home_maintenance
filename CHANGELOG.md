@@ -4,6 +4,56 @@ Notable changes to the Home Maintenance integration. The Unreleased section
 is rotated into a versioned section by the release workflow and becomes the
 Highlights block of the GitHub release notes.
 
+## Unreleased
+
+- Added: a built-in template library — 90+ pre-built maintenance tasks
+  (HVAC, plumbing, electrical, appliances, interior, exterior, yard, safety,
+  vehicles) browsable and searchable from the panel; picking one prefills
+  the add-task form.
+- Added: CSV import and export. Bulk-import tasks from a CSV file (with a
+  preview and per-line error reporting) via the template dialog, and export
+  all tasks to `home_maintenance_tasks.csv` — also a migration path from
+  other maintenance-tracker integrations.
+- Added: search and label filtering in the panel — a search box over task
+  titles/descriptions plus clickable label chips (OR logic) above the task
+  table.
+- Added: seasonal tasks. Time-based tasks can be restricted to **active
+  months** (e.g. April–October for lawn care): due dates landing out of
+  season move to the start of the next season, and the task is never
+  flagged due outside its months.
+- Added: a `days_until_due` attribute on time-based and fixed-date task
+  sensors (`0` = due today, negative = overdue) for automations and
+  dashboards.
+- Added: a global **Any task due** binary sensor aggregating all tasks,
+  with `due_count` and `due_tasks` attributes — one automation hook for
+  "does anything need attention".
+- Added: `create_task` and `mark_overdue` services. Automations, scripts,
+  and voice assistants can now create tasks (optionally returning the new
+  task id as a response variable) and force a task due for testing
+  notification/automation flows.
+- Added: a `max_history_entries` integration option controlling how many
+  completion-history entries are kept per task (default 50, `0` =
+  unlimited); the edit dialog now shows the full history in a scrollable
+  list.
+- Added: completing a task now dismisses its outstanding companion-app
+  notification (via `clear_notification` with the task's tag) and resets
+  the notification state so the task re-notifies when next due.
+- Fixed: seasonal tasks now flip their sensors (and the any-task-due
+  aggregate) exactly at season boundaries — a pending occurrence resurfaces
+  the moment the season starts, and a still-due task stops nagging when it
+  ends — and the todo list agrees with the sensors out of season.
+- Fixed: a fixed-date task created from the panel with a blank
+  "Last performed" now starts with its anchor pending (a past anchor is due
+  immediately), matching the documented behavior and the API default.
+- Fixed: `mark_overdue` fails loudly for a seasonal task outside its active
+  months instead of silently doing nothing, and `active_months` is dropped
+  when a task is created or retyped to a non-time trigger.
+- Changed: the API now rejects non-positive `interval_value` (matching the
+  panel), bounds the label list per task, and `create_task`/`mark_overdue`
+  require an admin user (automations and scripts are unaffected).
+- Changed: CSV export neutralizes spreadsheet formula injection (a leading
+  `=` `+` `-` `@` in a title/description is prefixed with an apostrophe).
+
 ## 1.5.22 — 2026-08-23
 
 - Added: a `todo.home_maintenance` todo list entity mirroring the tasks —

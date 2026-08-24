@@ -6,11 +6,20 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+import voluptuous as vol
 from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR_PLATFORM
 from homeassistant.components.calendar import DOMAIN as CALENDAR_PLATFORM
 from homeassistant.components.tag.const import EVENT_TAG_SCANNED
 from homeassistant.components.todo import DOMAIN as TODO_PLATFORM
-from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
+from homeassistant.core import (
+    Event,
+    HomeAssistant,
+    ServiceCall,
+    ServiceResponse,
+    SupportsResponse,
+    callback,
+)
+from homeassistant.exceptions import ServiceValidationError, Unauthorized
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import (
@@ -28,7 +37,12 @@ from .panel import (
     async_unregister_panel,
 )
 from .repairs import RepairsManager
-from .store import TaskStore
+from .store import TaskStore, new_task_from_fields
+from .task_fields import (
+    ADD_TASK_FIELDS,
+    LABELS_VALIDATOR,
+    TASK_FIELD_VALIDATORS,
+)
 from .triggers import UNAVAILABLE_STATES, get_trigger
 from .websocket import async_register_websockets
 
@@ -44,6 +58,25 @@ _LOGGER = logging.getLogger(__name__)
 CONFIG_SCHEMA = const.CONFIG_SCHEMA
 
 PLATFORMS = [BINARY_SENSOR_PLATFORM, CALENDAR_PLATFORM, TODO_PLATFORM]
+
+# create_task mirrors the websocket add_task schema, generated from the same
+# shared field map so the two APIs cannot drift apart.
+CREATE_TASK_SCHEMA = vol.Schema(
+    {
+        vol.Required("title"): TASK_FIELD_VALIDATORS["title"],
+        vol.Required("interval_value"): TASK_FIELD_VALIDATORS["interval_value"],
+        vol.Optional("interval_type", default="days"): TASK_FIELD_VALIDATORS[
+            "interval_type"
+        ],
+        vol.Optional("last_performed"): vol.Any(str, None),
+        vol.Optional("labels"): LABELS_VALIDATOR,
+        **{
+            vol.Optional(field_name): TASK_FIELD_VALIDATORS[field_name]
+            for field_name in ADD_TASK_FIELDS
+            if field_name not in ("title", "interval_value", "interval_type")
+        },
+    }
+)
 
 
 @dataclass
@@ -68,8 +101,15 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: HomeMaintenanceConfigEntry
 ) -> bool:
     """Set up the Home Maintenance config entry."""
-    # Initialize and load stored tasks
-    task_store = TaskStore(hass)
+    # Initialize and load stored tasks. The history cap option takes effect
+    # on the next completion (an options save reloads the entry, so a fresh
+    # store picks it up immediately).
+    task_store = TaskStore(
+        hass,
+        max_history_entries=entry.options.get(
+            const.OPTION_MAX_HISTORY, const.MAX_HISTORY_ENTRIES
+        ),
+    )
     await task_store.async_load()
 
     # Register Device (shared identity, defined once in const.device_info)
@@ -178,6 +218,8 @@ async def async_unload_entry(
         const.SERVICE_RESET_COUNT,
         const.SERVICE_SNOOZE_TASK,
         const.SERVICE_SEND_TASK_NOTIFICATION,
+        const.SERVICE_CREATE_TASK,
+        const.SERVICE_MARK_OVERDUE,
     ):
         hass.services.async_remove(const.DOMAIN, service)
     hass.data.pop(const.DOMAIN, None)
@@ -214,6 +256,54 @@ async def async_migrate_entry(
             entry, version=HomeMaintenanceConfigFlow.VERSION
         )
     return True
+
+
+async def _require_admin_context(hass: HomeAssistant, call: ServiceCall) -> None:
+    """
+    Reject task-mutating service calls made by a non-admin user.
+
+    Mirrors the @require_admin gate on the websocket mutation commands.
+    Calls without a user context (automations, scripts, other integrations)
+    are allowed through — those were configured by an admin.
+    """
+    user_id = call.context.user_id
+    if user_id is None:
+        return
+    user = await hass.auth.async_get_user(user_id)
+    if user is None or not user.is_admin:
+        raise Unauthorized(context=call.context)
+
+
+def _create_task_from_service_call(hass: HomeAssistant, call: ServiceCall) -> str:
+    """Build and store a new task from a create_task service call."""
+    data: HomeMaintenanceData = hass.data[const.DOMAIN]
+    msg = dict(call.data)
+
+    # Shared with the websocket add: normalizes last_performed and applies
+    # the fixed-date anchor-pending default.
+    new_task = new_task_from_fields(msg)
+    if new_task is None:
+        message = f"Could not parse last_performed: {msg['last_performed']}"
+        raise ServiceValidationError(message)
+
+    try:
+        return data.store.add(new_task, msg.get("labels", []))
+    except RuntimeError as err:
+        raise ServiceValidationError(str(err)) from err
+
+
+def _mark_overdue_from_service_call(hass: HomeAssistant, call: ServiceCall) -> None:
+    """Force a task due from a mark_overdue service call."""
+    entity_id = call.data["entity_id"]
+    task_id = _task_id_for_entity(hass, entity_id)
+    if task_id is None:
+        message = f"{entity_id} is not a Home Maintenance task"
+        raise ServiceValidationError(message)
+    data: HomeMaintenanceData = hass.data[const.DOMAIN]
+    try:
+        data.store.mark_overdue(task_id)
+    except RuntimeError as err:
+        raise ServiceValidationError(str(err)) from err
 
 
 def _task_id_for_entity(hass: HomeAssistant, entity_id: str) -> str | None:
@@ -314,6 +404,33 @@ def register_services(hass: HomeAssistant) -> None:
         const.SERVICE_SEND_TASK_NOTIFICATION,
         async_srv_send_task_notification,
         schema=const.SERVICE_SEND_TASK_NOTIFICATION_SCHEMA,
+    )
+
+    async def async_srv_create_task(call: ServiceCall) -> ServiceResponse:
+        # Task creation over websocket is admin-only; keep the service path
+        # consistent. Calls without a user context (automations, scripts)
+        # pass — they were authored by an admin.
+        await _require_admin_context(hass, call)
+        new_id = _create_task_from_service_call(hass, call)
+        return {"task_id": new_id} if call.return_response else None
+
+    hass.services.async_register(
+        const.DOMAIN,
+        const.SERVICE_CREATE_TASK,
+        async_srv_create_task,
+        schema=CREATE_TASK_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+
+    async def async_srv_mark_overdue(call: ServiceCall) -> None:
+        await _require_admin_context(hass, call)
+        _mark_overdue_from_service_call(hass, call)
+
+    hass.services.async_register(
+        const.DOMAIN,
+        const.SERVICE_MARK_OVERDUE,
+        async_srv_mark_overdue,
+        schema=const.SERVICE_MARK_OVERDUE_SCHEMA,
     )
 
 

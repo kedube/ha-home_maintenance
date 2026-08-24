@@ -8,6 +8,7 @@ export const emptyTaskFormData = (): TaskFormData => ({
     interval_type: "days",
     last_performed: "",
     anchor_date: "",
+    active_months: [],
     icon: "",
     label: [],
     tag: "",
@@ -37,6 +38,7 @@ export const taskToFormData = (
     interval_type: task.interval_type,
     last_performed: task.last_performed ?? "",
     anchor_date: task.anchor_date ?? "",
+    active_months: (task.active_months ?? []).map(String),
     icon: task.icon ?? "",
     label: labels.map((l) => l.label_id),
     tag: task.tag_id ?? "",
@@ -66,6 +68,33 @@ const triggerTypeSelector = (lang: string) => ({
                 { value: "count", label: localize("trigger_types.count", lang) },
                 { value: "runtime", label: localize("trigger_types.runtime", lang) },
             ],
+            mode: "dropdown",
+        },
+    },
+});
+
+/** Localized month names (1-12) from Intl, so no per-language keys needed. */
+export const monthOptions = (lang: string): { value: string; label: string }[] => {
+    let formatter: Intl.DateTimeFormat;
+    try {
+        formatter = new Intl.DateTimeFormat(lang, { month: "long" });
+    } catch {
+        formatter = new Intl.DateTimeFormat("en", { month: "long" });
+    }
+    return Array.from({ length: 12 }, (_, index) => ({
+        value: String(index + 1),
+        // Noon dodges timezone edge cases around the month boundary.
+        label: formatter.format(new Date(2026, index, 1, 12)),
+    }));
+};
+
+/** Seasonal month multi-select, shown for time-based tasks. */
+const activeMonthsField = (lang: string) => ({
+    name: "active_months",
+    selector: {
+        select: {
+            options: monthOptions(lang),
+            multiple: true,
             mode: "dropdown",
         },
     },
@@ -108,6 +137,7 @@ const triggerFields = (formData: TaskFormData, lang: string): any[] => {
     return [
         { name: "interval_value", required: true, selector: { number: { min: 1, mode: "box" } }, },
         intervalTypeField(lang),
+        activeMonthsField(lang),
     ];
 };
 
@@ -248,12 +278,15 @@ const triggerPayloadFields = (data: TaskFormData): Record<string, any> => {
     const isCount = data.trigger_type === "count";
     const isRuntime = data.trigger_type === "runtime";
     const isDate = data.trigger_type === "date";
+    const isTime = !isCount && !isRuntime && !isDate;
     return {
         trigger_type: data.trigger_type || "time",
         interval_value: (isCount || isRuntime) ? 1 : Number(data.interval_value),
         interval_type: (isCount || isRuntime) ? "days" : data.interval_type,
         // The selector emits YYYY-MM-DD; keep just the date part defensively.
         anchor_date: isDate ? (data.anchor_date?.trim().split("T")[0] || null) : null,
+        // Seasonal months only apply to time-based schedules.
+        active_months: isTime ? (data.active_months ?? []).map(Number) : [],
         count_entity_id: isCount ? (data.count_entity_id?.trim() || null) : null,
         count_threshold: isCount ? Number(data.count_threshold) : 0,
         runtime_entity_id: isRuntime ? (data.runtime_entity_id?.trim() || null) : null,
@@ -263,12 +296,18 @@ const triggerPayloadFields = (data: TaskFormData): Record<string, any> => {
 
 export const taskFormToAddPayload = (data: TaskFormData, lastPerformedISO: string): Record<string, any> => {
     const trigger = triggerPayloadFields(data);
+    // A blank "last performed" on a fixed-date task must reach the backend
+    // as *absent* so its anchor-pending default applies (a past anchor is
+    // immediately due); sending "today" would silently defer it a full
+    // interval. For every other trigger blank means "performed today".
+    const omitLastPerformed =
+        data.trigger_type === "date" && !data.last_performed?.trim();
     return {
         title: data.title.trim(),
         interval_value: trigger.interval_value,
         interval_type: trigger.interval_type,
         trigger_type: trigger.trigger_type,
-        last_performed: lastPerformedISO,
+        ...(omitLastPerformed ? {} : { last_performed: lastPerformedISO }),
         tag_id: data.tag?.trim() || undefined,
         icon: data.icon?.trim() || "mdi:calendar-check",
         labels: data.label ?? [],
@@ -276,6 +315,7 @@ export const taskFormToAddPayload = (data: TaskFormData, lastPerformedISO: strin
         description: data.description || undefined,
         group_id: data.group_id?.trim() || undefined,
         ...(trigger.anchor_date ? { anchor_date: trigger.anchor_date } : {}),
+        ...(trigger.active_months.length ? { active_months: trigger.active_months } : {}),
         ...(trigger.count_entity_id ? { count_entity_id: trigger.count_entity_id, count_threshold: trigger.count_threshold } : {}),
         ...(trigger.runtime_entity_id ? { runtime_entity_id: trigger.runtime_entity_id, runtime_threshold: trigger.runtime_threshold } : {}),
         ...notificationPayloadFields(data),

@@ -134,6 +134,10 @@
                     "notification_url": {
                         "heading": "URL openen",
                         "helper": "Optionele URL voor de Open-actie van de melding"
+                    },
+                    "active_months": {
+                        "heading": "Actieve maanden",
+                        "helper": "Seizoenstaken zijn alleen in deze maanden verschuldigd (leeg = het hele jaar)"
                     }
                 },
                 "sections": {
@@ -150,21 +154,22 @@
             },
             "current": {
                 "title": "Huidige taken",
-                "no_items": "Geen taken gevonden.",
-                "every": "elke",
-                "last": "Laatst",
                 "next": "Volgende vervaldatum",
                 "actions": {
-                    "complete": "Voltooien",
                     "edit": "Bewerken",
                     "move": "Verplaatsen naar groep",
                     "remove": "Verwijderen"
                 },
-                "confirm_remove": "Weet je zeker dat je deze taak wilt verwijderen?",
                 "alerts": {
                     "complete_success": "\"{title}\" gemarkeerd als voltooid. De volgende vervaldatum is opnieuw berekend.",
                     "complete_error": "Kan de taak niet als voltooid markeren. Zie de console voor details.",
                     "remove_error": "Kan de taak niet verwijderen. Zie de console voor details."
+                },
+                "filter": {
+                    "search": "Taken zoeken...",
+                    "templates": "Sjablonen bekijken",
+                    "export": "CSV exporteren",
+                    "clear": "Filters wissen"
                 }
             },
             "groups": {
@@ -268,6 +273,10 @@
                     "notification_url": {
                         "heading": "URL openen",
                         "helper": "Optionele URL voor de Open-actie van de melding"
+                    },
+                    "active_months": {
+                        "heading": "Actieve maanden",
+                        "helper": "Seizoenstaken zijn alleen in deze maanden verschuldigd (leeg = het hele jaar)"
                     }
                 },
                 "sections": {
@@ -303,7 +312,6 @@
                 "message_progress": "\"{title}\" als voltooid markeren? De voortgang ({interval}) begint opnieuw.",
                 "note_label": "Notitie (optioneel)",
                 "actions": {
-                    "cancel": "Annuleren",
                     "confirm": "Als voltooid markeren"
                 }
             },
@@ -313,7 +321,38 @@
                 "actions": {
                     "confirm": "Verwijderen"
                 }
+            },
+            "templates": {
+                "title": "Taaksjablonen",
+                "search": "Sjablonen zoeken...",
+                "import_csv": "Importeren uit CSV",
+                "choose_csv": "CSV-bestand kiezen",
+                "csv_hint": "Kolommen: title (verplicht), description, interval_value, interval_type, last_performed (JJJJ-MM-DD), icon, group_id",
+                "csv_empty": "Geen importeerbare rijen gevonden in het bestand.",
+                "no_matches": "Geen sjablonen gevonden voor je zoekopdracht.",
+                "import_count": "{count, plural, one {1 taak importeren} other {# taken importeren}}",
+                "imported": "{count, plural, one {1 taak geïmporteerd.} other {# taken geïmporteerd.}}",
+                "import_failed": "Importeren mislukt: {titles}",
+                "preview": {
+                    "title": "Titel",
+                    "interval": "Interval",
+                    "last_performed": "Laatst uitgevoerd",
+                    "group": "Groep"
+                }
             }
+        }
+    },
+    "templates": {
+        "categories": {
+            "hvac": "Verwarming & airco",
+            "plumbing": "Sanitair",
+            "electrical": "Elektra",
+            "appliances": "Apparaten",
+            "interior": "Binnen",
+            "exterior": "Buiten",
+            "yard": "Tuin",
+            "safety": "Veiligheid",
+            "vehicles": "Voertuigen"
         }
     }
 }

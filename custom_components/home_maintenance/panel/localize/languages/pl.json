@@ -134,6 +134,10 @@
                     "notification_url": {
                         "heading": "Adres URL do otwarcia",
                         "helper": "Opcjonalny adres URL dla akcji Otwórz w powiadomieniu"
+                    },
+                    "active_months": {
+                        "heading": "Aktywne miesiące",
+                        "helper": "Zadania sezonowe są wymagane tylko w tych miesiącach (puste = cały rok)"
                     }
                 },
                 "sections": {
@@ -150,21 +154,22 @@
             },
             "current": {
                 "title": "Bieżące zadania",
-                "no_items": "Nie znaleziono zadań.",
-                "every": "co",
-                "last": "Ostatnio",
                 "next": "Następny termin",
                 "actions": {
-                    "complete": "Wykonane",
                     "edit": "Edytuj",
                     "move": "Przenieś do grupy",
                     "remove": "Usuń"
                 },
-                "confirm_remove": "Czy na pewno chcesz usunąć to zadanie?",
                 "alerts": {
                     "complete_success": "\"{title}\" oznaczono jako wykonane. Następny termin został przeliczony.",
                     "complete_error": "Nie udało się oznaczyć zadania jako wykonane. Szczegóły w konsoli.",
                     "remove_error": "Nie udało się usunąć zadania. Szczegóły w konsoli."
+                },
+                "filter": {
+                    "search": "Szukaj zadań...",
+                    "templates": "Przeglądaj szablony",
+                    "export": "Eksportuj CSV",
+                    "clear": "Wyczyść filtry"
                 }
             },
             "groups": {
@@ -268,6 +273,10 @@
                     "notification_url": {
                         "heading": "Adres URL do otwarcia",
                         "helper": "Opcjonalny adres URL dla akcji Otwórz w powiadomieniu"
+                    },
+                    "active_months": {
+                        "heading": "Aktywne miesiące",
+                        "helper": "Zadania sezonowe są wymagane tylko w tych miesiącach (puste = cały rok)"
                     }
                 },
                 "sections": {
@@ -303,7 +312,6 @@
                 "message_progress": "Oznaczyć \"{title}\" jako wykonane? Postęp ({interval}) zacznie się od nowa.",
                 "note_label": "Notatka (opcjonalnie)",
                 "actions": {
-                    "cancel": "Anuluj",
                     "confirm": "Oznacz jako wykonane"
                 }
             },
@@ -313,7 +321,38 @@
                 "actions": {
                     "confirm": "Usuń"
                 }
+            },
+            "templates": {
+                "title": "Szablony zadań",
+                "search": "Szukaj szablonów...",
+                "import_csv": "Importuj z CSV",
+                "choose_csv": "Wybierz plik CSV",
+                "csv_hint": "Kolumny: title (wymagana), description, interval_value, interval_type, last_performed (RRRR-MM-DD), icon, group_id",
+                "csv_empty": "Nie znaleziono wierszy do zaimportowania.",
+                "no_matches": "Żaden szablon nie pasuje do wyszukiwania.",
+                "import_count": "{count, plural, one {Importuj 1 zadanie} few {Importuj # zadania} many {Importuj # zadań} other {Importuj # zadania}}",
+                "imported": "{count, plural, one {Zaimportowano 1 zadanie.} few {Zaimportowano # zadania.} many {Zaimportowano # zadań.} other {Zaimportowano # zadania.}}",
+                "import_failed": "Nie udało się zaimportować: {titles}",
+                "preview": {
+                    "title": "Tytuł",
+                    "interval": "Interwał",
+                    "last_performed": "Ostatnio wykonano",
+                    "group": "Grupa"
+                }
             }
+        }
+    },
+    "templates": {
+        "categories": {
+            "hvac": "Ogrzewanie i klimatyzacja",
+            "plumbing": "Hydraulika",
+            "electrical": "Elektryka",
+            "appliances": "Sprzęt AGD",
+            "interior": "Wnętrze",
+            "exterior": "Na zewnątrz",
+            "yard": "Ogród",
+            "safety": "Bezpieczeństwo",
+            "vehicles": "Pojazdy"
         }
     }
 }

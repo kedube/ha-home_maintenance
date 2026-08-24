@@ -20,7 +20,8 @@
       "init": {
         "data": {
           "admin_only": "Restringir el panel solo a administradores",
-          "sidebar_title": "El nombre que se muestra en la barra lateral para esta integración."
+          "sidebar_title": "El nombre que se muestra en la barra lateral para esta integración.",
+          "max_history_entries": "Entradas de historial conservadas por tarea (0 = ilimitado)"
         }
       }
     }

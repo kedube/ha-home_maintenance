@@ -267,3 +267,57 @@ async def test_list_payload_truncates_history(hass, setup_entry) -> None:
     assert len(listed["history"]) == LIST_HISTORY_ENTRIES
     assert listed["history"][-1]["note"] == f"run {LIST_HISTORY_ENTRIES + 3}"
     assert len(data.store.get(TASK_ID)["history"]) == LIST_HISTORY_ENTRIES + 4
+
+
+async def test_configurable_history_cap(hass) -> None:
+    """The max_history_entries option caps history; 0 means unlimited."""
+    from custom_components.home_maintenance.store import TaskStore
+
+    capped = TaskStore(hass, max_history_entries=2)
+    capped.tasks[TASK_ID] = make_task()
+    for index in range(5):
+        capped.update_last_performed(TASK_ID, note=f"run {index}")
+    assert [entry["note"] for entry in capped.tasks[TASK_ID].history] == [
+        "run 3",
+        "run 4",
+    ]
+
+    unlimited = TaskStore(hass, max_history_entries=0)
+    unlimited.tasks[TASK_ID] = make_task()
+    for index in range(MAX_HISTORY_ENTRIES + 10):
+        unlimited.update_last_performed(TASK_ID, note=f"run {index}")
+    assert len(unlimited.tasks[TASK_ID].history) == MAX_HISTORY_ENTRIES + 10
+
+
+async def test_history_cap_option_reaches_store(hass) -> None:
+    """A configured max_history_entries option is honored after setup."""
+    from unittest.mock import AsyncMock, patch
+
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Home Maintenance",
+        data={"admin_only": True, "sidebar_title": "Home Maintenance"},
+        options={
+            "admin_only": True,
+            "sidebar_title": "Home Maintenance",
+            "max_history_entries": 3,
+        },
+    )
+    entry.add_to_hass(hass)
+    with (
+        patch(
+            "custom_components.home_maintenance.async_register_panel",
+            new=AsyncMock(),
+        ),
+        patch("custom_components.home_maintenance.async_unregister_panel"),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        data: HomeMaintenanceData = hass.data[DOMAIN]
+        data.store.add(make_task())
+        for index in range(6):
+            data.store.update_last_performed(TASK_ID, note=f"run {index}")
+        assert len(data.store.tasks[TASK_ID].history) == 3

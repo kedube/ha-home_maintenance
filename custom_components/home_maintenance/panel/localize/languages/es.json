@@ -134,6 +134,10 @@
                     "notification_url": {
                         "heading": "URL para abrir",
                         "helper": "URL opcional para la acción Abrir de la notificación"
+                    },
+                    "active_months": {
+                        "heading": "Meses activos",
+                        "helper": "Las tareas de temporada solo vencen en estos meses (vacío = todo el año)"
                     }
                 },
                 "sections": {
@@ -150,21 +154,22 @@
             },
             "current": {
                 "title": "Tareas actuales",
-                "no_items": "No se encontraron tareas.",
-                "every": "cada",
-                "last": "Última",
                 "next": "Próximo vencimiento",
                 "actions": {
-                    "complete": "Completar",
                     "edit": "Editar",
                     "move": "Mover a un grupo",
                     "remove": "Eliminar"
                 },
-                "confirm_remove": "¿Seguro que quieres eliminar esta tarea?",
                 "alerts": {
                     "complete_success": "\"{title}\" marcada como completada. Se recalculó la próxima fecha de vencimiento.",
                     "complete_error": "No se pudo marcar la tarea como completada. Consulta la consola para más detalles.",
                     "remove_error": "No se pudo eliminar la tarea. Consulta la consola para más detalles."
+                },
+                "filter": {
+                    "search": "Buscar tareas...",
+                    "templates": "Explorar plantillas",
+                    "export": "Exportar CSV",
+                    "clear": "Borrar filtros"
                 }
             },
             "groups": {
@@ -268,6 +273,10 @@
                     "notification_url": {
                         "heading": "URL para abrir",
                         "helper": "URL opcional para la acción Abrir de la notificación"
+                    },
+                    "active_months": {
+                        "heading": "Meses activos",
+                        "helper": "Las tareas de temporada solo vencen en estos meses (vacío = todo el año)"
                     }
                 },
                 "sections": {
@@ -303,7 +312,6 @@
                 "message_progress": "¿Marcar \"{title}\" como completada? El progreso ({interval}) comenzará de nuevo.",
                 "note_label": "Nota (opcional)",
                 "actions": {
-                    "cancel": "Cancelar",
                     "confirm": "Marcar como completada"
                 }
             },
@@ -313,7 +321,38 @@
                 "actions": {
                     "confirm": "Eliminar"
                 }
+            },
+            "templates": {
+                "title": "Plantillas de tareas",
+                "search": "Buscar plantillas...",
+                "import_csv": "Importar desde CSV",
+                "choose_csv": "Elegir archivo CSV",
+                "csv_hint": "Columnas: title (obligatoria), description, interval_value, interval_type, last_performed (AAAA-MM-DD), icon, group_id",
+                "csv_empty": "No se encontraron filas importables en el archivo.",
+                "no_matches": "Ninguna plantilla coincide con tu búsqueda.",
+                "import_count": "{count, plural, one {Importar 1 tarea} other {Importar # tareas}}",
+                "imported": "{count, plural, one {1 tarea importada.} other {# tareas importadas.}}",
+                "import_failed": "Error al importar: {titles}",
+                "preview": {
+                    "title": "Título",
+                    "interval": "Intervalo",
+                    "last_performed": "Última realización",
+                    "group": "Grupo"
+                }
             }
+        }
+    },
+    "templates": {
+        "categories": {
+            "hvac": "Climatización",
+            "plumbing": "Fontanería",
+            "electrical": "Electricidad",
+            "appliances": "Electrodomésticos",
+            "interior": "Interior",
+            "exterior": "Exterior",
+            "yard": "Jardín",
+            "safety": "Seguridad",
+            "vehicles": "Vehículos"
         }
     }
 }

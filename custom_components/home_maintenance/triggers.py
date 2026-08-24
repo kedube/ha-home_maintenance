@@ -9,7 +9,7 @@ the websocket API share a single implementation.
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import TYPE_CHECKING, Any
 
 from dateutil.relativedelta import relativedelta
@@ -19,7 +19,7 @@ from .datetime_utils import parse_local_datetime
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
-    from datetime import date, datetime
+    from datetime import datetime
 
     from homeassistant.core import HomeAssistant
 
@@ -31,6 +31,51 @@ UNAVAILABLE_STATES = ("unknown", "unavailable")
 # skipped past repetitions of a badly overdue task (~13 years of a daily
 # task) without letting a corrupt interval spin forever.
 _MAX_PROJECTION_STEPS = 5000
+
+
+def _advance_to_active_month(day: date, active_months: list[int]) -> date:
+    """
+    Move a due date forward into the task's next active month.
+
+    A date already inside an active month (or a task without a seasonal
+    restriction) is returned unchanged; otherwise the date becomes the first
+    day of the next active month, so a seasonal task resumes at the start of
+    its season instead of being flagged overdue all winter.
+    """
+    if not active_months or day.month in active_months:
+        return day
+    year, month = day.year, day.month
+    for _ in range(12):
+        month += 1
+        if month > 12:  # noqa: PLR2004
+            month = 1
+            year += 1
+        if month in active_months:
+            return date(year, month, 1)
+    return day
+
+
+def _next_season_boundary(today: date, active_months: list[int]) -> date | None:
+    """
+    Return the next first-of-month where the season's active state flips.
+
+    A seasonal task's due state can change without any completion or task
+    edit — the season ending (due -> not due) or starting (a pending
+    occurrence resurfacing). This is the next such moment, used to schedule
+    entity refreshes; None for year-round tasks.
+    """
+    if not active_months:
+        return None
+    currently_active = today.month in active_months
+    year, month = today.year, today.month
+    for _ in range(12):
+        month += 1
+        if month > 12:  # noqa: PLR2004
+            month = 1
+            year += 1
+        if (month in active_months) != currently_active:
+            return date(year, month, 1)
+    return None
 
 
 def _parse_anchor(value: str | None) -> date | None:
@@ -53,24 +98,29 @@ def _project_future(
     assume the task is completed on each due date, so a repetition landing in
     the past (a badly overdue task) is meaningless: it is skipped without
     consuming the limit, and the step cap bounds that fast-forward.
+
+    The loop compares plain calendar dates and localizes only the occurrences
+    it keeps — a badly overdue short-interval task can skip thousands of past
+    repetitions, and per-step timezone localization would dominate that walk.
     """
-    first = dt_util.start_of_local_day(occurrence_at(0))
-    today = dt_util.start_of_local_day()
-    occurrences = [first]
+    first = occurrence_at(0)
+    today = dt_util.now().date()
+    horizon_date = dt_util.as_local(horizon).date()
+    kept = [first]
     previous = first
     for k in range(1, _MAX_PROJECTION_STEPS):
-        occurrence = dt_util.start_of_local_day(occurrence_at(k))
+        occurrence = occurrence_at(k)
         # Stop on a non-advancing (zero-length) interval, defensively.
         if occurrence <= previous:
             break
         previous = occurrence
-        if occurrence > horizon:
+        if occurrence > horizon_date:
             break
         if occurrence > today:
-            occurrences.append(occurrence)
-            if len(occurrences) >= max(limit, 1):
+            kept.append(occurrence)
+            if len(kept) >= max(limit, 1):
                 break
-    return occurrences
+    return [dt_util.start_of_local_day(day) for day in kept]
 
 
 def _interval_offset(
@@ -111,6 +161,26 @@ class TimeTrigger:
     def on_complete(self, hass: HomeAssistant, task: HomeMaintenanceTask) -> None:
         """Apply trigger-specific effects of completing the task."""
 
+    def force_overdue(self, hass: HomeAssistant, task: HomeMaintenanceTask) -> None:
+        """
+        Backdate trigger state so the task reads as due (mark_overdue service).
+
+        Sets last_performed one whole interval before yesterday, putting the
+        next due date in the past. Raises RuntimeError when the trigger state
+        cannot be forced.
+        """
+        # Out of season the is_due gate would keep the entity off no matter
+        # how far back the completion is pushed — fail loudly rather than
+        # letting the service "succeed" with no visible effect.
+        if task.active_months and dt_util.now().month not in task.active_months:
+            msg = "cannot mark a seasonal task overdue outside its active months"
+            raise RuntimeError(msg)
+        yesterday = dt_util.now().date() - timedelta(days=1)
+        task.last_performed = dt_util.start_of_local_day(
+            yesterday
+            - _interval_offset(task.interval_type, max(task.interval_value, 1), 1)
+        ).isoformat()
+
     def next_due(
         self, hass: HomeAssistant, task: HomeMaintenanceTask
     ) -> datetime | None:
@@ -126,15 +196,44 @@ class TimeTrigger:
         due_date = last.date() + _interval_offset(
             task.interval_type, task.interval_value, 1
         )
+        # A seasonal task's due date lands in its next active month.
+        due_date = _advance_to_active_month(due_date, task.active_months)
         # start_of_local_day accepts a date and returns local midnight for it.
         return dt_util.start_of_local_day(due_date)
 
     def is_due(self, hass: HomeAssistant, task: HomeMaintenanceTask) -> bool:
         """Return whether the task is currently due."""
+        # A seasonal task is never due outside its active months — an
+        # occurrence left uncompleted when the season ended resurfaces when
+        # the next season starts, instead of nagging all year.
+        if task.active_months and dt_util.now().month not in task.active_months:
+            return False
         due = self.next_due(hass, task)
         if due is None:
             return True
         return dt_util.start_of_local_day() >= due
+
+    def next_transition(
+        self, hass: HomeAssistant, task: HomeMaintenanceTask
+    ) -> datetime | None:
+        """
+        Return the next wall-clock moment the due state may flip on its own.
+
+        Entities schedule their refresh timer here. For most tasks that is
+        the next due moment; a seasonal task can also flip at a season
+        boundary — off when the season ends with the task still due, and back
+        on when the season resumes with an occurrence pending — with no
+        completion or task edit firing a signal.
+        """
+        now = dt_util.now()
+        candidates = []
+        due = self.next_due(hass, task)
+        if due is not None and due > now:
+            candidates.append(due)
+        boundary = _next_season_boundary(now.date(), task.active_months)
+        if boundary is not None:
+            candidates.append(dt_util.start_of_local_day(boundary))
+        return min(candidates) if candidates else None
 
     def upcoming(
         self,
@@ -153,6 +252,24 @@ class TimeTrigger:
         if first is None:
             return []
         first_date = dt_util.as_local(first).date()
+        if task.active_months:
+            # Seasonal repetitions chain from the previous *adjusted*
+            # occurrence (assume completed on its due date, add the interval,
+            # skip to the next active month), so they cannot be expressed as
+            # anchor + k * interval. Memoized so _project_future's sequential
+            # occurrence_at(k) calls stay O(1) each.
+            memo: dict[int, date] = {0: first_date}
+
+            def occurrence_at(k: int) -> date:
+                for i in range(len(memo), k + 1):
+                    memo[i] = _advance_to_active_month(
+                        memo[i - 1]
+                        + _interval_offset(task.interval_type, task.interval_value, 1),
+                        task.active_months,
+                    )
+                return memo[k]
+
+            return _project_future(occurrence_at, horizon, limit)
         return _project_future(
             lambda k: (
                 first_date
@@ -171,11 +288,20 @@ class TimeTrigger:
     def extra_attributes(self, hass: HomeAssistant, task: HomeMaintenanceTask) -> dict:
         """Return trigger-specific entity attributes."""
         due = self.next_due(hass, task)
-        return {
+        attributes = {
             "interval_value": task.interval_value,
             "interval_type": task.interval_type,
             "next_due": due.isoformat() if due else "unknown",
+            # 0 = due today, negative = overdue, None = never performed.
+            "days_until_due": (
+                (dt_util.as_local(due).date() - dt_util.now().date()).days
+                if due
+                else None
+            ),
         }
+        if task.active_months:
+            attributes["active_months"] = task.active_months
+        return attributes
 
 
 class DateTrigger(TimeTrigger):
@@ -204,13 +330,17 @@ class DateTrigger(TimeTrigger):
 
     def _next_index(self, task: HomeMaintenanceTask) -> int | None:
         """Return k of the first occurrence strictly after the last completion."""
+        last = parse_local_datetime(task.last_performed)
+        return self._index_after(task, last.date() if last else None)
+
+    def _index_after(self, task: HomeMaintenanceTask, ref: date | None) -> int | None:
+        """Return k of the first occurrence strictly after the reference date."""
         anchor = self._anchor(task)
         if anchor is None:
             return None
-        last = parse_local_datetime(task.last_performed)
-        if last is None or last.date() < anchor:
+        if ref is None or ref < anchor:
             return 0
-        last_date = last.date()
+        last_date = ref
         interval = max(task.interval_value, 1)
         # Land at (or just below) the target analytically, then step the last
         # bit — keeps this O(1)-ish even for a daily anchor set years ago.
@@ -228,6 +358,26 @@ class DateTrigger(TimeTrigger):
         while (anchor + _interval_offset(task.interval_type, interval, k)) <= last_date:
             k += 1
         return k
+
+    def force_overdue(self, hass: HomeAssistant, task: HomeMaintenanceTask) -> None:
+        """Backdate the last completion to just before the latest occurrence."""
+        today = dt_util.now().date()
+        anchor = self._anchor(task)
+        next_k = self._index_after(task, today)
+        if anchor is None or next_k is None:
+            msg = "date task has no valid anchor_date"
+            raise RuntimeError(msg)
+        if next_k == 0:
+            msg = "cannot mark overdue: the task's first occurrence is in the future"
+            raise RuntimeError(msg)
+        # The most recent occurrence on or before today; completing "the day
+        # before it" makes it the next due date again.
+        occurrence = anchor + _interval_offset(
+            task.interval_type, max(task.interval_value, 1), next_k - 1
+        )
+        task.last_performed = dt_util.start_of_local_day(
+            occurrence - timedelta(days=1)
+        ).isoformat()
 
     def next_due(
         self, hass: HomeAssistant, task: HomeMaintenanceTask
@@ -300,6 +450,10 @@ class CountTrigger(TimeTrigger):
     def on_complete(self, hass: HomeAssistant, task: HomeMaintenanceTask) -> None:
         """Reset the counter when the task is completed."""
         task.current_count = 0
+
+    def force_overdue(self, hass: HomeAssistant, task: HomeMaintenanceTask) -> None:
+        """Raise the counter to the threshold so the task reads as due."""
+        task.current_count = max(task.current_count, task.count_threshold)
 
     def next_due(
         self, hass: HomeAssistant, task: HomeMaintenanceTask
@@ -386,6 +540,14 @@ class RuntimeTrigger(TimeTrigger):
         when the sensor recovers).
         """
         task.runtime_baseline = self.current_value(hass, task)
+
+    def force_overdue(self, hass: HomeAssistant, task: HomeMaintenanceTask) -> None:
+        """Lower the baseline a full threshold below the sensor's value."""
+        value = self.current_value(hass, task)
+        if value is None:
+            msg = "cannot mark overdue: the runtime sensor is unavailable"
+            raise RuntimeError(msg)
+        task.runtime_baseline = value - task.runtime_threshold
 
     def next_due(
         self, hass: HomeAssistant, task: HomeMaintenanceTask

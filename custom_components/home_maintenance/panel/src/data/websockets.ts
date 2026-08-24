@@ -1,10 +1,5 @@
-import { EntityRegistryEntry, Tag, Task, IntegrationConfig, Label } from '../types';
+import { EntityRegistryEntry, Task, IntegrationConfig, Label } from '../types';
 import type { HomeAssistant } from "custom-card-helpers";
-
-export const loadTags = (hass: HomeAssistant): Promise<Tag[]> =>
-    hass.connection.sendMessagePromise<Tag[]>({
-        type: 'tag/list',
-    });
 
 export const loadRegistryEntries = (hass: HomeAssistant): Promise<EntityRegistryEntry[]> =>
     hass.callWS({

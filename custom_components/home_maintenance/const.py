@@ -15,11 +15,13 @@ DOMAIN = "home_maintenance"
 # schemas so a client cannot bloat the storage file with huge strings.
 MAX_STRING_LENGTH = 500
 
-# Completion-history entries kept per task (oldest dropped beyond this), and
-# how many of them ride along in the task-list payload every panel refetches
-# on every change (the single-task fetch returns the full history).
+# Completion-history entries kept per task (oldest dropped beyond this) —
+# the default for the max_history_entries option, where 0 means unlimited —
+# and how many of them ride along in the task-list payload every panel
+# refetches on every change (the single-task fetch returns the full history).
 MAX_HISTORY_ENTRIES = 50
 LIST_HISTORY_ENTRIES = 5
+OPTION_MAX_HISTORY = "max_history_entries"
 
 # Calendar projection bounds: future occurrences per task are generated up to
 # this horizon, capped so a short-interval task can't flood the calendar.
@@ -28,7 +30,6 @@ CALENDAR_MAX_OCCURRENCES = 53
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
-PANEL_FILENAME = "panel/main.js"
 PANEL_URL = "home-maintenance"
 PANEL_API_PATH = "/home_maintenance_static"
 # The ?v= query string maps each frontend bundle to the installed integration
@@ -130,6 +131,17 @@ SERVICE_SEND_TASK_NOTIFICATION_SCHEMA = vol.Schema(
     }
 )
 
+# The create_task schema is built in __init__.py from the shared task-field
+# validators (task_fields.py) so it stays in lockstep with the websocket API.
+SERVICE_CREATE_TASK = "create_task"
+
+SERVICE_MARK_OVERDUE = "mark_overdue"
+SERVICE_MARK_OVERDUE_SCHEMA = vol.Schema(
+    {
+        vol.Required("entity_id"): cv.entity_id,
+    }
+)
+
 CONFIG_STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Optional("admin_only", default=True): cv.boolean,
@@ -155,5 +167,11 @@ def get_options_schema(config_entry: ConfigEntry) -> vol.Schema:
                     config_entry.data.get("sidebar_title", PANEL_TITLE),
                 ),
             ): cv.string,
+            vol.Optional(
+                OPTION_MAX_HISTORY,
+                default=config_entry.options.get(
+                    OPTION_MAX_HISTORY, MAX_HISTORY_ENTRIES
+                ),
+            ): vol.All(vol.Coerce(int), vol.Range(min=0)),
         }
     )

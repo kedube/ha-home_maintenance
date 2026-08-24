@@ -134,6 +134,10 @@
                     "notification_url": {
                         "heading": "Open URL",
                         "helper": "Optional URL for the notification's Open action"
+                    },
+                    "active_months": {
+                        "heading": "Active months",
+                        "helper": "Seasonal tasks are only due in these months (empty = year-round)"
                     }
                 },
                 "sections": {
@@ -150,21 +154,22 @@
             },
             "current": {
                 "title": "Current Tasks",
-                "no_items": "No tasks found.",
-                "every": "every",
-                "last": "Last",
                 "next": "Next Due",
                 "actions": {
-                    "complete": "Complete",
                     "edit": "Edit",
                     "move": "Move to group",
                     "remove": "Remove"
                 },
-                "confirm_remove": "Are you sure you want to remove this task?",
                 "alerts": {
                     "complete_success": "\"{title}\" marked complete. The next due date was recalculated.",
                     "complete_error": "Failed to mark task complete. See console for details.",
                     "remove_error": "Failed to remove the task. See console for details."
+                },
+                "filter": {
+                    "search": "Search tasks...",
+                    "templates": "Browse templates",
+                    "export": "Export CSV",
+                    "clear": "Clear filters"
                 }
             },
             "groups": {
@@ -268,6 +273,10 @@
                     "notification_url": {
                         "heading": "Open URL",
                         "helper": "Optional URL for the notification's Open action"
+                    },
+                    "active_months": {
+                        "heading": "Active months",
+                        "helper": "Seasonal tasks are only due in these months (empty = year-round)"
                     }
                 },
                 "sections": {
@@ -303,7 +312,6 @@
                 "message_progress": "Mark \"{title}\" as complete? Progress ({interval}) will start over.",
                 "note_label": "Note (optional)",
                 "actions": {
-                    "cancel": "Cancel",
                     "confirm": "Mark Complete"
                 }
             },
@@ -313,7 +321,38 @@
                 "actions": {
                     "confirm": "Remove"
                 }
+            },
+            "templates": {
+                "title": "Task Templates",
+                "search": "Search templates...",
+                "import_csv": "Import from CSV",
+                "choose_csv": "Choose CSV file",
+                "csv_hint": "Columns: title (required), description, interval_value, interval_type, last_performed (YYYY-MM-DD), icon, group_id",
+                "csv_empty": "No importable rows found in the file.",
+                "no_matches": "No templates match your search.",
+                "import_count": "{count, plural, one {Import 1 task} other {Import # tasks}}",
+                "imported": "{count, plural, one {1 task imported.} other {# tasks imported.}}",
+                "import_failed": "Failed to import: {titles}",
+                "preview": {
+                    "title": "Title",
+                    "interval": "Interval",
+                    "last_performed": "Last performed",
+                    "group": "Group"
+                }
             }
+        }
+    },
+    "templates": {
+        "categories": {
+            "hvac": "HVAC",
+            "plumbing": "Plumbing",
+            "electrical": "Electrical",
+            "appliances": "Appliances",
+            "interior": "Interior",
+            "exterior": "Exterior",
+            "yard": "Yard & garden",
+            "safety": "Safety",
+            "vehicles": "Vehicles"
         }
     }
 }

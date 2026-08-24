@@ -11,8 +11,6 @@ user could add/update/delete tasks and groups directly over the API.
 from __future__ import annotations
 
 import functools
-import uuid
-from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 import voluptuous as vol
@@ -20,13 +18,14 @@ from homeassistant.components import websocket_api
 from homeassistant.components.websocket_api import connection
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, SIGNAL_TASKS_CHANGED, VERSION
-from .store import HomeMaintenanceTask
+from .datetime_utils import normalize_last_performed
+from .store import new_task_from_fields
 from .task_fields import (
     ADD_TASK_FIELDS,
     INTERVAL_TYPES,
+    LABELS_VALIDATOR,
     TASK_FIELD_VALIDATORS,
     bounded_str_or_none,
 )
@@ -44,7 +43,7 @@ _ADD_TASK_SCHEMA = {
     vol.Required("interval_value"): TASK_FIELD_VALIDATORS["interval_value"],
     vol.Required("interval_type"): vol.In(INTERVAL_TYPES),
     vol.Optional("last_performed"): vol.Any(str, None),
-    vol.Optional("labels"): [str],
+    vol.Optional("labels"): LABELS_VALIDATOR,
     **{
         vol.Optional(field): TASK_FIELD_VALIDATORS[field]
         for field in ADD_TASK_FIELDS
@@ -56,7 +55,7 @@ _ADD_TASK_SCHEMA = {
 # live on the entity registry, not the task).
 _UPDATES_SCHEMA = vol.Schema(
     {
-        vol.Optional("labels"): [str],
+        vol.Optional("labels"): LABELS_VALIDATOR,
         **{
             vol.Optional(field): validator
             for field, validator in TASK_FIELD_VALIDATORS.items()
@@ -93,19 +92,6 @@ def _handle_store_errors(handler: _WsHandler) -> _WsHandler:
             conn.send_error(msg["id"], "invalid_input", str(err))
 
     return wrapper
-
-
-def _normalize_last_performed(last_str: str | None) -> str | None:
-    """Return a midnight-floored local ISO date, or None if unparseable."""
-    if not last_str:
-        return dt_util.start_of_local_day().isoformat()
-    parsed = dt_util.parse_datetime(last_str)
-    if parsed is None:
-        return None
-    # Naive datetimes are taken as local time, not UTC.
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=dt_util.get_default_time_zone())
-    return dt_util.start_of_local_day(dt_util.as_local(parsed)).isoformat()
 
 
 # Handlers registered at import time; async_register_websockets registers them.
@@ -160,29 +146,12 @@ def websocket_add_task(
     """Add a new task. The store validates trigger-specific required fields."""
     store = _get_store(hass)
 
-    raw_last_performed = msg.get("last_performed")
-    # A fixed-date task created without a last-performed date starts with its
-    # anchor pending: default to the day before the anchor so a past (or
-    # today's) anchor is immediately due, instead of "completed today"
-    # silently deferring it a full interval.
-    if not raw_last_performed and msg.get("trigger_type") == "date":
-        anchor = dt_util.parse_date(str(msg.get("anchor_date", "")).split("T")[0])
-        if anchor is not None:
-            raw_last_performed = (anchor - timedelta(days=1)).isoformat()
-
-    last_performed = _normalize_last_performed(raw_last_performed)
-    if last_performed is None:
+    new_task = new_task_from_fields(msg)
+    if new_task is None:
         connection.send_error(
             msg["id"], "invalid_date", f"Could not parse date: {msg['last_performed']}"
         )
         return
-
-    fields = {field: msg[field] for field in ADD_TASK_FIELDS if field in msg}
-    new_task = HomeMaintenanceTask(
-        id=f"home_maintenance_{uuid.uuid4().hex}",
-        last_performed=last_performed,
-        **fields,
-    )
 
     new_id = store.add(new_task, msg.get("labels", []))
     connection.send_result(msg["id"], {"success": True, "id": new_id})
@@ -210,7 +179,7 @@ def websocket_update_task(
     # null (allowed by the schema) is dropped rather than silently rewritten
     # to today — which would mark the task completed today.
     if updates.get("last_performed"):
-        last_performed = _normalize_last_performed(updates["last_performed"])
+        last_performed = normalize_last_performed(updates["last_performed"])
         if last_performed is None:
             connection.send_error(
                 msg["id"],

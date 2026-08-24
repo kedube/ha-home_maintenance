@@ -20,7 +20,8 @@
       "init": {
         "data": {
           "admin_only": "Ogranicz panel tylko do administratorów",
-          "sidebar_title": "Nazwa wyświetlana na pasku bocznym dla tej integracji."
+          "sidebar_title": "Nazwa wyświetlana na pasku bocznym dla tej integracji.",
+          "max_history_entries": "Liczba wpisów historii na zadanie (0 = bez limitu)"
         }
       }
     }

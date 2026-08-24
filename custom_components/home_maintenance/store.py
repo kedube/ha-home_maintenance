@@ -1,7 +1,9 @@
 """Store Home Maintenance configuration."""
 
 import logging
+import uuid
 from datetime import datetime
+from typing import Any
 
 import attr
 from homeassistant.core import HomeAssistant
@@ -10,7 +12,11 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.util import dt as dt_util
 
 from . import const
-from .task_fields import ALLOWED_UPDATE_FIELDS
+from .datetime_utils import (
+    default_date_task_last_performed,
+    normalize_last_performed,
+)
+from .task_fields import ADD_TASK_FIELDS, ALLOWED_UPDATE_FIELDS
 from .triggers import get_trigger
 
 _LOGGER = logging.getLogger(__name__)
@@ -47,6 +53,9 @@ class HomeMaintenanceTask:
     last_performed: str = attr.ib()
     # Fixed calendar date the "date" trigger's schedule is anchored to.
     anchor_date: str | None = attr.ib(default=None)
+    # Seasonal restriction for time-based tasks: months (1-12) the task is
+    # active in. Empty means year-round.
+    active_months: list[int] = attr.ib(factory=list)
     tag_id: str | None = attr.ib(default=None)
     icon: str | None = attr.ib(default=None)
     trigger_type: str = attr.ib(default="time")
@@ -92,6 +101,31 @@ def task_event_data(task: HomeMaintenanceTask, entity_id: str | None) -> dict:
     }
 
 
+def new_task_from_fields(fields: dict[str, Any]) -> HomeMaintenanceTask | None:
+    """
+    Build a new task from validated API fields (websocket add / create_task).
+
+    Applies the shared last-performed normalization — including the
+    fixed-date default, where an omitted date leaves the anchor pending
+    rather than "completed today" — and generates the task id. Returns None
+    when a supplied last_performed cannot be parsed; trigger-specific field
+    validation happens in TaskStore.add.
+    """
+    raw_last_performed = fields.get("last_performed")
+    if not raw_last_performed and fields.get("trigger_type") == "date":
+        raw_last_performed = default_date_task_last_performed(fields.get("anchor_date"))
+
+    last_performed = normalize_last_performed(raw_last_performed)
+    if last_performed is None:
+        return None
+
+    return HomeMaintenanceTask(
+        id=f"home_maintenance_{uuid.uuid4().hex}",
+        last_performed=last_performed,
+        **{name: fields[name] for name in ADD_TASK_FIELDS if name in fields},
+    )
+
+
 def normalize_group_id(group_id: str | None) -> str | None:
     """Normalize a group name to its canonical stored value."""
     if group_id is None:
@@ -129,9 +163,14 @@ class TaskStore:
     catch-all SIGNAL_TASKS_CHANGED) that interested parties subscribe to.
     """
 
-    def __init__(self, hass: HomeAssistant) -> None:
-        """Initialize the storage."""
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        max_history_entries: int = const.MAX_HISTORY_ENTRIES,
+    ) -> None:
+        """Initialize the storage. max_history_entries of 0 means unlimited."""
         self.hass = hass
+        self._max_history_entries = max_history_entries
         self._store = _TaskStorage(
             hass,
             STORAGE_VERSION_MAJOR,
@@ -187,6 +226,19 @@ class TaskStore:
                 ]
             else:
                 task.history = []
+            # Same defense for the seasonal month list: keep only in-range
+            # month numbers so corrupt storage can't break due computation.
+            if isinstance(task.active_months, list):
+                task.active_months = sorted(
+                    {
+                        month
+                        for month in task.active_months
+                        # bool is an int subclass; True must not become month 1.
+                        if type(month) is int and 1 <= month <= 12  # noqa: PLR2004
+                    }
+                )
+            else:
+                task.active_months = []
             self._tasks[task.id] = task
         # Groups in use by tasks always exist, even if the stored list lags.
         self._groups = {
@@ -214,9 +266,14 @@ class TaskStore:
         reimplementing the trigger semantics. history_limit truncates the
         completion history to the most recent N entries.
         """
-        data = attr.asdict(task)
-        if history_limit is not None:
-            data["history"] = data["history"][-history_limit:]
+        # Copy history only up to the requested limit — asdict would deep-copy
+        # the full record (unbounded when max_history_entries is 0) just for
+        # the truncation below to throw most of it away on every list fetch.
+        data = attr.asdict(
+            task, filter=lambda attribute, _value: attribute.name != "history"
+        )
+        recent = task.history[-history_limit:] if history_limit else task.history
+        data["history"] = [dict(entry) for entry in recent]
         trigger = get_trigger(task.trigger_type)
         next_due = trigger.next_due(self.hass, task)
         progress = trigger.progress(self.hass, task)
@@ -343,6 +400,20 @@ class TaskStore:
         if task.group_id:
             self._groups.add(task.group_id)
 
+    @staticmethod
+    def _normalize_trigger_fields(task: HomeMaintenanceTask) -> None:
+        """
+        Drop trigger fields that do not apply to the task's trigger type.
+
+        Seasonal months only affect the time trigger; leaving them on another
+        type (possible via the service/websocket APIs, which accept any field
+        combination) would half-apply — the inherited is_due month gate
+        without the due-date adjustment — so the task silently never fires
+        out of season while its attributes claim otherwise.
+        """
+        if task.trigger_type != "time":
+            task.active_months = []
+
     def add(self, task: HomeMaintenanceTask, labels: list[str] | None = None) -> str:
         """Add a new task and announce it."""
         error = get_trigger(task.trigger_type).validate(attr.asdict(task))
@@ -350,6 +421,7 @@ class TaskStore:
             raise RuntimeError(error)
 
         get_trigger(task.trigger_type).initialize(self.hass, task)
+        self._normalize_trigger_fields(task)
         self._register_task_group(task)
         self._tasks[task.id] = task
         self._save()
@@ -400,6 +472,7 @@ class TaskStore:
                 value = value or None  # noqa: PLW2901
             setattr(task, key, value)
 
+        self._normalize_trigger_fields(task)
         self._register_task_group(task)
 
         # Re-initialize trigger-managed state (counter reset, runtime baseline
@@ -447,7 +520,8 @@ class TaskStore:
                 "note": note or None,
             }
         )
-        del task.history[: -const.MAX_HISTORY_ENTRIES]
+        if self._max_history_entries > 0:
+            del task.history[: -self._max_history_entries]
         return task
 
     def _fire_completed_event(self, task: HomeMaintenanceTask) -> None:
@@ -495,6 +569,17 @@ class TaskStore:
             self._fire_completed_event(task)
             async_dispatcher_send(self.hass, const.signal_task_updated(task.id))
         async_dispatcher_send(self.hass, const.SIGNAL_TASKS_CHANGED)
+
+    def mark_overdue(self, task_id: str) -> None:
+        """Force a task into the due state (for testing automations)."""
+        task = self._tasks.get(task_id)
+        if task is None:
+            msg = "Task not found."
+            raise RuntimeError(msg)
+
+        get_trigger(task.trigger_type).force_overdue(self.hass, task)
+        self._save()
+        self._notify_updated(task_id)
 
     def increment_count(self, task_id: str) -> None:
         """Increment the count for a count-based task."""
@@ -552,15 +637,16 @@ class TaskStore:
         async_dispatcher_send(self.hass, const.signal_task_updated(task_id))
         async_dispatcher_send(self.hass, const.SIGNAL_TASKS_CHANGED)
 
+    def _storage_payload(self) -> dict:
+        """Build the persisted representation of the current state."""
+        return {
+            "tasks": [attr.asdict(task) for task in self._tasks.values()],
+            "groups": sorted(self._groups),
+        }
+
     def _save(self) -> None:
         """Persist tasks in the background, coalescing rapid successive writes."""
-        self._store.async_delay_save(
-            lambda: {
-                "tasks": [attr.asdict(task) for task in self._tasks.values()],
-                "groups": sorted(self._groups),
-            },
-            SAVE_DELAY,
-        )
+        self._store.async_delay_save(self._storage_payload, SAVE_DELAY)
 
     async def async_flush(self) -> None:
         """
@@ -572,9 +658,4 @@ class TaskStore:
         would land on the old instance after the new one already read stale
         data, and be lost on its next save.
         """
-        await self._store.async_save(
-            {
-                "tasks": [attr.asdict(task) for task in self._tasks.values()],
-                "groups": sorted(self._groups),
-            }
-        )
+        await self._store.async_save(self._storage_payload())

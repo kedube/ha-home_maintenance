@@ -20,7 +20,8 @@
       "init": {
         "data": {
           "admin_only": "Restrict panel to admins only",
-          "sidebar_title": "The name shown in the sidebar for this integration."
+          "sidebar_title": "The name shown in the sidebar for this integration.",
+          "max_history_entries": "Completion-history entries kept per task (0 = unlimited)"
         }
       }
     }

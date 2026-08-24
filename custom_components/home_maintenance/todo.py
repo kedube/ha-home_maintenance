@@ -79,8 +79,10 @@ class HomeMaintenanceTodoList(TodoListEntity):
         due = trigger.next_due(self.hass, task)
         # For dated triggers is_due is just a comparison against next_due —
         # derive it from the due date already computed instead of running the
-        # whole computation twice per task on every state write.
-        if due is not None:
+        # whole computation twice per task on every state write. Seasonal
+        # tasks carry the extra out-of-season gate, so they take the full
+        # is_due path (which the binary sensor state must agree with).
+        if due is not None and not task.active_months:
             is_due = dt_util.start_of_local_day() >= due
         else:
             is_due = trigger.is_due(self.hass, task)

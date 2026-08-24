@@ -134,6 +134,10 @@
                     "notification_url": {
                         "heading": "URL à ouvrir",
                         "helper": "URL facultative pour l'action Ouvrir de la notification"
+                    },
+                    "active_months": {
+                        "heading": "Mois actifs",
+                        "helper": "Les tâches saisonnières ne sont dues que pendant ces mois (vide = toute l'année)"
                     }
                 },
                 "sections": {
@@ -150,21 +154,22 @@
             },
             "current": {
                 "title": "Tâches actuelles",
-                "no_items": "Aucune tâche trouvée.",
-                "every": "tous les",
-                "last": "Dernière",
                 "next": "Prochaine échéance",
                 "actions": {
-                    "complete": "Terminer",
                     "edit": "Modifier",
                     "move": "Déplacer vers un groupe",
                     "remove": "Supprimer"
                 },
-                "confirm_remove": "Voulez-vous vraiment supprimer cette tâche ?",
                 "alerts": {
                     "complete_success": "\"{title}\" marquée comme terminée. La prochaine échéance a été recalculée.",
                     "complete_error": "Impossible de marquer la tâche comme terminée. Consultez la console pour plus de détails.",
                     "remove_error": "Impossible de supprimer la tâche. Consultez la console pour plus de détails."
+                },
+                "filter": {
+                    "search": "Rechercher des tâches...",
+                    "templates": "Parcourir les modèles",
+                    "export": "Exporter en CSV",
+                    "clear": "Effacer les filtres"
                 }
             },
             "groups": {
@@ -268,6 +273,10 @@
                     "notification_url": {
                         "heading": "URL à ouvrir",
                         "helper": "URL facultative pour l'action Ouvrir de la notification"
+                    },
+                    "active_months": {
+                        "heading": "Mois actifs",
+                        "helper": "Les tâches saisonnières ne sont dues que pendant ces mois (vide = toute l'année)"
                     }
                 },
                 "sections": {
@@ -303,7 +312,6 @@
                 "message_progress": "Marquer \"{title}\" comme terminée ? La progression ({interval}) repartira de zéro.",
                 "note_label": "Note (facultatif)",
                 "actions": {
-                    "cancel": "Annuler",
                     "confirm": "Marquer comme terminée"
                 }
             },
@@ -313,7 +321,38 @@
                 "actions": {
                     "confirm": "Supprimer"
                 }
+            },
+            "templates": {
+                "title": "Modèles de tâches",
+                "search": "Rechercher des modèles...",
+                "import_csv": "Importer depuis un CSV",
+                "choose_csv": "Choisir un fichier CSV",
+                "csv_hint": "Colonnes : title (obligatoire), description, interval_value, interval_type, last_performed (AAAA-MM-JJ), icon, group_id",
+                "csv_empty": "Aucune ligne importable trouvée dans le fichier.",
+                "no_matches": "Aucun modèle ne correspond à votre recherche.",
+                "import_count": "{count, plural, one {Importer 1 tâche} other {Importer # tâches}}",
+                "imported": "{count, plural, one {1 tâche importée.} other {# tâches importées.}}",
+                "import_failed": "Échec de l'importation : {titles}",
+                "preview": {
+                    "title": "Titre",
+                    "interval": "Intervalle",
+                    "last_performed": "Dernière exécution",
+                    "group": "Groupe"
+                }
             }
+        }
+    },
+    "templates": {
+        "categories": {
+            "hvac": "CVC",
+            "plumbing": "Plomberie",
+            "electrical": "Électricité",
+            "appliances": "Électroménager",
+            "interior": "Intérieur",
+            "exterior": "Extérieur",
+            "yard": "Jardin",
+            "safety": "Sécurité",
+            "vehicles": "Véhicules"
         }
     }
 }

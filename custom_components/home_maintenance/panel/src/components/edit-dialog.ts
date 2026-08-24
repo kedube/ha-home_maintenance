@@ -156,7 +156,9 @@ class HMEditDialog extends LitElement {
                     <div class="section-label">
                         ${localize('panel.dialog.edit_task.sections.history', lang)}
                     </div>
-                    ${renderHistoryList(this._history, 10, this.hass.locale)}
+                    <div class="history-scroll">
+                        ${renderHistoryList(this._history, this._history.length, this.hass.locale)}
+                    </div>
                 ` : nothing}
 
                 ${dialogFooter(html`

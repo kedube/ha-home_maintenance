@@ -70,4 +70,8 @@ async def test_options_flow(hass, setup_entry) -> None:
     assert result["type"] is FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
 
-    assert setup_entry.options == {"admin_only": False, "sidebar_title": "Renamed"}
+    assert setup_entry.options == {
+        "admin_only": False,
+        "sidebar_title": "Renamed",
+        "max_history_entries": 50,
+    }

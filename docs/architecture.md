@@ -56,6 +56,8 @@ All per-trigger-type behavior lives here, one strategy class per type (`time`, `
 
 The `date` trigger anchors occurrences to `anchor_date + k * interval` and never shifts them: `next_due` is the first occurrence strictly after the last completion, located analytically (not by looping day by day) so a daily anchor set years ago stays O(1)-ish.
 
+The `time` trigger supports a seasonal restriction (`active_months`): a computed due date landing in an inactive month advances to the first day of the next active month, `is_due` is always false outside the season, and `upcoming` chains each projected repetition from the previous *adjusted* occurrence (memoized) because seasonal occurrences cannot be expressed as `first + k * interval`. Every trigger also implements `force_overdue` (the `mark_overdue` service): backdate `last_performed` (time), return to the most recent past occurrence (date), jump to the threshold (count), or re-baseline below the sensor (runtime).
+
 Day-boundary math (a task is due on a calendar day, not at an instant) goes through `dt_util.start_of_local_day` everywhere — store, triggers, and the websocket layer share the same flooring.
 
 The store, entities, and websocket serialization all call through `get_trigger(trigger_type)` — changing trigger semantics is a one-file edit.
@@ -64,13 +66,15 @@ The store, entities, and websocket serialization all call through `get_trigger(t
 
 Entities are thin views over the store's task objects (`_attr_should_poll = False`). They subscribe to `SIGNAL_TASK_UPDATED` and rewrite their state when their task changes. Time-based tasks additionally schedule an `async_track_point_in_time` callback at their due moment so the state flips exactly on time rather than on a poll. The platform (not the store) listens for `SIGNAL_TASK_ADDED`/`_REMOVED` to create entities and clean up the entity registry.
 
+The platform also creates one aggregate `HomeMaintenanceAnyDueSensor` (`binary_sensor.any_task_due`), on while any task is due. It refreshes on `SIGNAL_TASKS_CHANGED` and schedules its own wall-clock callback at the earliest upcoming due moment, since a task turning due purely by time fires no dispatcher signal.
+
 ### `__init__.py` — setup, watchers, services
 
 `async_setup_entry` builds a typed `HomeMaintenanceData` dataclass (store, device id, watcher unsubscribes) stored on `entry.runtime_data` and mirrored at `hass.data[DOMAIN]` for non-entry-scoped consumers (websocket handlers, panel).
 
 Count/runtime tasks are served by **targeted** state listeners: `async_track_state_change_event` subscribed to exactly the entity ids the triggers report via `watched_entity`, rebuilt (via `SIGNAL_TASKS_CHANGED`) only when the watched set actually changes. The count watcher increments on `off → on` transitions; the runtime watcher persists a baseline reset when the sensor's value drops below the recorded baseline, and pushes a `SIGNAL_TASK_UPDATED` only when the change is worth announcing — a due-state flip or a whole-unit progress change — so a sensor ticking every few seconds doesn't rewrite entity state and reload every open panel on each tick.
 
-Services (`reset_last_performed`, `increment_count`, `reset_count`, `snooze_task`, `send_task_notification`) resolve the target task id through the entity registry and delegate to the store; they are deregistered again when the entry unloads.
+Services (`reset_last_performed`, `increment_count`, `reset_count`, `snooze_task`, `send_task_notification`, `mark_overdue`) resolve the target task id through the entity registry and delegate to the store; `create_task` builds a task from the same shared field map as the websocket `add_task` (including the fixed-date last-performed default) and optionally returns the new id as a service response. All are deregistered again when the entry unloads. The `max_history_entries` option is read at setup and passed to the `TaskStore`, which caps `_apply_completion`'s history append (0 = unlimited).
 
 ### Other backend modules
 
@@ -78,7 +82,7 @@ Services (`reset_last_performed`, `increment_count`, `reset_count`, `snooze_task
 - `todo.py` — one todo list entity mirroring the store (due → `needs_action`); checking an item off completes through the store, summary/description edits map to `update_task`, and reopening is rejected because due state is computed, not stored.
 - `repairs.py` — keeps Repairs issues in sync for missing watched entities and missing notify services; re-checks on task changes, HA start, notify service (de)registration, and the flagged entities' first state.
 - `diagnostics.py` — config entry diagnostics with free-text fields (descriptions, notes, URLs, tag ids) redacted.
-- `notifications.py` — the per-task notification manager (send-time gates, once-per-day bookkeeping, mobile action handling).
+- `notifications.py` — the per-task notification manager (send-time gates, once-per-day bookkeeping, mobile action handling). Listens for `home_maintenance_task_completed` and dismisses the completed task's outstanding companion-app notification (`clear_notification` by tag; mobile_app targets only — other notify services would deliver it as literal text).
 
 ### `websocket.py` — API
 
@@ -98,6 +102,8 @@ Every store-touching handler is wrapped by a decorator that maps `RuntimeError` 
 ## Frontend (`panel/`)
 
 A Lit + TypeScript app bundled with esbuild into three committed bundles under `dist/`: `main.js` (the sidebar panel) plus `todo-card.js` and `add-task-card.js` (Lovelace cards, injected on every dashboard via `add_extra_js_url`). `panel.py` serves them from a static path with long-lived cache headers; the URLs carry a `?v=<VERSION>` query string, so every release is a fresh URL and browsers never reuse a stale bundle after an upgrade.
+
+Pure, DOM-free logic lives in dedicated modules so vitest exercises it in plain Node: `compute.ts` (date math, schedule bucketing, task filtering), `schema.ts` (form schemas and payload builders), `csv.ts` (CSV parse/build for import/export), and `templates.ts` (the built-in template library data). The panel's filter bar (search + label chips) filters in `main.ts` via `filterTasks` before handing the list to the table; the template/CSV dialog (`components/template-dialog.ts`) fires a `template-selected` event that the panel routes into the add-task form's public `prefill` method, and creates tasks directly for CSV imports (export values are formula-injection-neutralized).
 
 - `src/main.ts` — orchestrator: subscribes to `subscribe_updates` with a short debounce so **any** change — panel action, NFC scan, service call, automation — refreshes the UI live, and wires the components together. Static data (HA components, tags, config) loads once; the push path refetches only what mutations can change (tasks, groups, registries). Task removal and completion confirm through the shared confirm dialog; feedback surfaces as toasts.
 - `src/components/task-table.ts` — the task list; renders backend-computed `due`/`next_due`/`progress` values, memoizes rows/columns so `ha-data-table` gets stable references across the frequent `hass` re-renders. Emits `task-complete` / `task-menu-action`.

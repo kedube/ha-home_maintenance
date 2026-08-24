@@ -56,6 +56,12 @@ export const historyStyles = css`
         font-size: 14px;
     }
 
+    /* Wrap a long (uncapped) history list so the dialog doesn't grow. */
+    .history-scroll {
+        max-height: 180px;
+        overflow-y: auto;
+    }
+
     .history-list li {
         margin: 2px 0;
     }

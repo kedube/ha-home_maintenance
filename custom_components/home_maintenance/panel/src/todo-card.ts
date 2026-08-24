@@ -10,6 +10,7 @@ import {
     TaskSchedule,
     computeTaskSchedule,
     formatDaysLabel,
+    formatProgress,
     formatTriggerInterval,
     isDatedTrigger,
     parseStoredDate,
@@ -393,7 +394,7 @@ class HomeMaintenanceTodoCard extends LitElement {
                             <div class="task-section">
                                 <div class="section-label">${localize('card.todo.progress', lang)}</div>
                                 <div class="section-content">
-                                    ${task.progress_current ?? 0} / ${task.progress_target ?? 0}
+                                    ${formatProgress(task)}
                                 </div>
                             </div>
                         ` : nothing}

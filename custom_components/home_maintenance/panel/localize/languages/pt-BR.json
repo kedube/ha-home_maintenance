@@ -134,6 +134,10 @@
                     "notification_url": {
                         "heading": "URL para abrir",
                         "helper": "URL opcional para a ação Abrir da notificação"
+                    },
+                    "active_months": {
+                        "heading": "Meses ativos",
+                        "helper": "Tarefas sazonais só vencem nesses meses (vazio = o ano todo)"
                     }
                 },
                 "sections": {
@@ -150,21 +154,22 @@
             },
             "current": {
                 "title": "Tarefas atuais",
-                "no_items": "Nenhuma tarefa encontrada.",
-                "every": "a cada",
-                "last": "Última",
                 "next": "Próximo vencimento",
                 "actions": {
-                    "complete": "Concluir",
                     "edit": "Editar",
                     "move": "Mover para grupo",
                     "remove": "Remover"
                 },
-                "confirm_remove": "Tem certeza de que deseja remover esta tarefa?",
                 "alerts": {
                     "complete_success": "\"{title}\" marcada como concluída. O próximo vencimento foi recalculado.",
                     "complete_error": "Falha ao marcar a tarefa como concluída. Veja o console para detalhes.",
                     "remove_error": "Falha ao remover a tarefa. Veja o console para detalhes."
+                },
+                "filter": {
+                    "search": "Pesquisar tarefas...",
+                    "templates": "Explorar modelos",
+                    "export": "Exportar CSV",
+                    "clear": "Limpar filtros"
                 }
             },
             "groups": {
@@ -268,6 +273,10 @@
                     "notification_url": {
                         "heading": "URL para abrir",
                         "helper": "URL opcional para a ação Abrir da notificação"
+                    },
+                    "active_months": {
+                        "heading": "Meses ativos",
+                        "helper": "Tarefas sazonais só vencem nesses meses (vazio = o ano todo)"
                     }
                 },
                 "sections": {
@@ -303,7 +312,6 @@
                 "message_progress": "Marcar \"{title}\" como concluída? O progresso ({interval}) recomeçará do zero.",
                 "note_label": "Nota (opcional)",
                 "actions": {
-                    "cancel": "Cancelar",
                     "confirm": "Marcar como concluída"
                 }
             },
@@ -313,7 +321,38 @@
                 "actions": {
                     "confirm": "Remover"
                 }
+            },
+            "templates": {
+                "title": "Modelos de tarefas",
+                "search": "Pesquisar modelos...",
+                "import_csv": "Importar de CSV",
+                "choose_csv": "Escolher arquivo CSV",
+                "csv_hint": "Colunas: title (obrigatória), description, interval_value, interval_type, last_performed (AAAA-MM-DD), icon, group_id",
+                "csv_empty": "Nenhuma linha importável encontrada no arquivo.",
+                "no_matches": "Nenhum modelo corresponde à sua pesquisa.",
+                "import_count": "{count, plural, one {Importar 1 tarefa} other {Importar # tarefas}}",
+                "imported": "{count, plural, one {1 tarefa importada.} other {# tarefas importadas.}}",
+                "import_failed": "Falha ao importar: {titles}",
+                "preview": {
+                    "title": "Título",
+                    "interval": "Intervalo",
+                    "last_performed": "Última execução",
+                    "group": "Grupo"
+                }
             }
+        }
+    },
+    "templates": {
+        "categories": {
+            "hvac": "Climatização",
+            "plumbing": "Hidráulica",
+            "electrical": "Elétrica",
+            "appliances": "Eletrodomésticos",
+            "interior": "Interior",
+            "exterior": "Exterior",
+            "yard": "Jardim",
+            "safety": "Segurança",
+            "vehicles": "Veículos"
         }
     }
 }

@@ -16,10 +16,39 @@ from .const import MAX_STRING_LENGTH, NOTIFICATION_URL_SCHEMES, NOTIFY_WHEN_OPTI
 TRIGGER_TYPES = ["time", "date", "count", "runtime"]
 INTERVAL_TYPES = ["days", "weeks", "months", "years"]
 
-# Shared length-bounded string validators; also reused by the websocket
-# layer for free-text fields outside the task-field map (e.g. history notes).
+# Shared length-bounded string validators, used across the field map and the
+# websocket layer's free-text fields (e.g. history notes).
 bounded_str = vol.All(vol.Coerce(str), vol.Length(max=MAX_STRING_LENGTH))
 bounded_str_or_none = vol.Any(None, bounded_str)
+
+# Labels ride along with add/update (they live on the entity registry, not
+# the task). Bounded so one call cannot bloat the registry entry.
+MAX_LABELS = 50
+LABELS_VALIDATOR = vol.All([bounded_str], vol.Length(max=MAX_LABELS))
+
+
+MONTHS_IN_YEAR = 12
+
+
+def _active_months(value: object) -> list[int]:
+    """Validate a seasonal month list: ints 1-12, deduplicated and sorted."""
+    if value in (None, "", []):
+        return []
+    if not isinstance(value, list):
+        msg = "active_months must be a list of month numbers"
+        raise vol.Invalid(msg)
+    months = set()
+    for item in value:
+        try:
+            month = int(item)
+        except (TypeError, ValueError):
+            msg = f"active_months entry is not a month number: {item!r}"
+            raise vol.Invalid(msg) from None
+        if not 1 <= month <= MONTHS_IN_YEAR:
+            msg = f"active_months entry out of range 1-12: {month}"
+            raise vol.Invalid(msg)
+        months.add(month)
+    return sorted(months)
 
 
 def _notification_url(value: object) -> str | None:
@@ -43,10 +72,13 @@ def _notification_url(value: object) -> str | None:
 TASK_FIELD_VALIDATORS: dict[str, object] = {
     "title": bounded_str,
     "trigger_type": vol.In(TRIGGER_TYPES),
-    "interval_value": vol.Coerce(int),
+    # min 1: a zero/negative interval would make a time task permanently due
+    # (next_due = last_performed) — the panel enforces this, the API must too.
+    "interval_value": vol.All(vol.Coerce(int), vol.Range(min=1)),
     "interval_type": vol.In(INTERVAL_TYPES),
     "last_performed": vol.Any(str, None),
     "anchor_date": bounded_str_or_none,
+    "active_months": _active_months,
     "icon": bounded_str_or_none,
     "tag_id": bounded_str_or_none,
     "area_id": bounded_str_or_none,

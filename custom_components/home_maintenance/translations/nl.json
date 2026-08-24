@@ -20,7 +20,8 @@
       "init": {
         "data": {
           "admin_only": "Beperk het paneel tot alleen beheerders",
-          "sidebar_title": "De naam die in de zijbalk wordt getoond voor deze integratie."
+          "sidebar_title": "De naam die in de zijbalk wordt getoond voor deze integratie.",
+          "max_history_entries": "Bewaarde geschiedenisitems per taak (0 = onbeperkt)"
         }
       }
     }

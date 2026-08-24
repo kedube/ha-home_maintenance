@@ -134,6 +134,10 @@
                     "notification_url": {
                         "heading": "URL da aprire",
                         "helper": "URL facoltativo per l'azione Apri della notifica"
+                    },
+                    "active_months": {
+                        "heading": "Mesi attivi",
+                        "helper": "Le attività stagionali scadono solo in questi mesi (vuoto = tutto l'anno)"
                     }
                 },
                 "sections": {
@@ -150,21 +154,22 @@
             },
             "current": {
                 "title": "Attività correnti",
-                "no_items": "Nessuna attività trovata.",
-                "every": "ogni",
-                "last": "Ultima",
                 "next": "Prossima scadenza",
                 "actions": {
-                    "complete": "Completa",
                     "edit": "Modifica",
                     "move": "Sposta nel gruppo",
                     "remove": "Rimuovi"
                 },
-                "confirm_remove": "Vuoi davvero rimuovere questa attività?",
                 "alerts": {
                     "complete_success": "\"{title}\" contrassegnata come completata. La prossima scadenza è stata ricalcolata.",
                     "complete_error": "Impossibile contrassegnare l'attività come completata. Vedi la console per i dettagli.",
                     "remove_error": "Impossibile rimuovere l'attività. Vedi la console per i dettagli."
+                },
+                "filter": {
+                    "search": "Cerca attività...",
+                    "templates": "Sfoglia modelli",
+                    "export": "Esporta CSV",
+                    "clear": "Cancella filtri"
                 }
             },
             "groups": {
@@ -268,6 +273,10 @@
                     "notification_url": {
                         "heading": "URL da aprire",
                         "helper": "URL facoltativo per l'azione Apri della notifica"
+                    },
+                    "active_months": {
+                        "heading": "Mesi attivi",
+                        "helper": "Le attività stagionali scadono solo in questi mesi (vuoto = tutto l'anno)"
                     }
                 },
                 "sections": {
@@ -303,7 +312,6 @@
                 "message_progress": "Contrassegnare \"{title}\" come completata? L'avanzamento ({interval}) ripartirà da zero.",
                 "note_label": "Nota (facoltativa)",
                 "actions": {
-                    "cancel": "Annulla",
                     "confirm": "Contrassegna come completata"
                 }
             },
@@ -313,7 +321,38 @@
                 "actions": {
                     "confirm": "Rimuovi"
                 }
+            },
+            "templates": {
+                "title": "Modelli di attività",
+                "search": "Cerca modelli...",
+                "import_csv": "Importa da CSV",
+                "choose_csv": "Scegli file CSV",
+                "csv_hint": "Colonne: title (obbligatoria), description, interval_value, interval_type, last_performed (AAAA-MM-GG), icon, group_id",
+                "csv_empty": "Nessuna riga importabile trovata nel file.",
+                "no_matches": "Nessun modello corrisponde alla ricerca.",
+                "import_count": "{count, plural, one {Importa 1 attività} other {Importa # attività}}",
+                "imported": "{count, plural, one {1 attività importata.} other {# attività importate.}}",
+                "import_failed": "Importazione non riuscita: {titles}",
+                "preview": {
+                    "title": "Titolo",
+                    "interval": "Intervallo",
+                    "last_performed": "Ultima esecuzione",
+                    "group": "Gruppo"
+                }
             }
+        }
+    },
+    "templates": {
+        "categories": {
+            "hvac": "Climatizzazione",
+            "plumbing": "Idraulica",
+            "electrical": "Impianto elettrico",
+            "appliances": "Elettrodomestici",
+            "interior": "Interni",
+            "exterior": "Esterni",
+            "yard": "Giardino",
+            "safety": "Sicurezza",
+            "vehicles": "Veicoli"
         }
     }
 }

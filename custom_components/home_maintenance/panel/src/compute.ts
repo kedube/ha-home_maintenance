@@ -1,5 +1,5 @@
 import { localize } from '../localize/localize';
-import { Task } from './types';
+import { EntityRegistryEntry, Task } from './types';
 
 /**
  * Pure task computations shared by the panel and the cards. This module is
@@ -104,6 +104,41 @@ export const formatDaysLabel = (schedule: TaskSchedule, task: Task, lang: string
         return localize('card.todo.days_overdue', lang, '{count}', Math.abs(days));
     }
     return localize('card.todo.days_left', lang, '{count}', days);
+};
+
+/**
+ * Filter the task list by a free-text query (title/description/group name,
+ * case-insensitive — matching the todo card's search semantics) and selected
+ * label ids (OR logic — a task matches when its entity carries any selected
+ * label). Empty query and no labels returns the input list unchanged so
+ * render caches keyed on identity stay warm.
+ */
+export const filterTasks = (
+    tasks: Task[],
+    registry: EntityRegistryEntry[],
+    query: string,
+    labelIds: string[],
+): Task[] => {
+    const needle = query.trim().toLowerCase();
+    if (!needle && !labelIds.length) return tasks;
+
+    const labelsByTask = new Map<string, string[]>();
+    if (labelIds.length) {
+        registry.forEach((entry) => labelsByTask.set(entry.unique_id, entry.labels));
+    }
+
+    return tasks.filter((task) => {
+        if (needle) {
+            const haystack =
+                `${task.title}\n${task.description ?? ''}\n${task.group_id ?? ''}`.toLowerCase();
+            if (!haystack.includes(needle)) return false;
+        }
+        if (labelIds.length) {
+            const taskLabels = labelsByTask.get(task.id) ?? [];
+            if (!labelIds.some((id) => taskLabels.includes(id))) return false;
+        }
+        return true;
+    });
 };
 
 /** Trailing-edge debouncer for coalescing subscription pushes. */

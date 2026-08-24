@@ -16,6 +16,8 @@ Originally created by [@TJPoorman](https://github.com/TJPoorman/home_maintenance
   - [Trigger types](#trigger-types)
   - [Optional task fields](#optional-task-fields)
   - [Task groups](#task-groups)
+  - [Search and label filtering](#search-and-label-filtering)
+  - [Template library and CSV import/export](#template-library-and-csv-importexport)
   - [NFC tags](#nfc-tags)
 - [Dashboard card](#dashboard-card)
 - [Entities](#entities)
@@ -61,6 +63,10 @@ Setup asks for two options; both can be changed later without removing the integ
 - **Admin only** — restrict the sidebar panel to admin users (default: **on**). Non-admin users don't see the panel, but task entities remain visible to everyone.
 - **Sidebar title** — the name shown for the panel in the sidebar (default: *Home Maintenance*).
 
+A third option is available from the **Configure** dialog after setup:
+
+- **Completion-history entries kept per task** — how many [completion history](#completion-history) entries each task retains (default 50; `0` keeps them all).
+
 Only a **single instance** of the integration can be added — all tasks live under that one entry.
 
 ### Options
@@ -82,7 +88,7 @@ Submitting reloads the integration automatically, so changes — including a new
 Open **Home Maintenance** from the sidebar. The panel stacks three cards in a single column:
 
 - **Create New Task** — the main fields (title, trigger type, the trigger's two fields, last performed) and the **Add Task** button sit on one line; everything else lives behind the collapsed **Optional settings** row. On narrow screens the fields wrap automatically.
-- **Current Tasks** — every task with its interval, last-performed date, and next due date (overdue dates highlighted), one section per [group](#task-groups). Each row has a ✓ button to mark the task complete (after a confirmation, since completing resets the schedule or counter) and a menu for editing (including the title), moving the task to a group, or deleting it.
+- **Current Tasks** — every task with its interval, last-performed date, and next due date (overdue dates highlighted), one section per [group](#task-groups). A toolbar above the table offers [search and label filtering](#search-and-label-filtering) plus the [template library and CSV import/export](#template-library-and-csv-importexport). Each row has a ✓ button to mark the task complete (after a confirmation, since completing resets the schedule or counter) and a menu for editing (including the title), moving the task to a group, or deleting it.
 - **Groups** — create, rename, and delete [task groups](#task-groups).
 
 Actions confirm with toast notifications, destructive actions ask first in a dialog, and the panel updates live: changes made outside it — an NFC tag scan, a service call, an automation incrementing a counter, a runtime sensor ticking over — appear immediately without a refresh.
@@ -99,12 +105,14 @@ Every task has a trigger type that controls when it becomes due:
 | **Runtime-based** | a numeric sensor has accumulated a threshold amount since the last completion (e.g. hours of runtime, liters of consumption) | records the sensor's current value as the new baseline |
 
 - **Fixed-date** tasks are for seasonal work: pick an **anchor date** and a repeat interval, and the due dates stay anchored to the calendar — "winterize the sprinklers every year on October 1" stays October 1 no matter when you actually completed it last. A missed date stays due until you complete the task, after which the next anchored date takes over. (Completing *before* an anchor date does not skip it — the schedule never shifts.) When you create a fixed-date task and leave **Last performed** blank, the anchor date itself counts as pending, so a past anchor is due immediately; set **Last performed** explicitly if you already did the work this cycle.
+- **Time-based** tasks can be made **seasonal** by picking **active months** (e.g. April–October for lawn care): a due date that would land out of season moves to the first day of the next active month, and the task is never flagged due outside its months — an occurrence left uncompleted when the season ends resurfaces when the next season starts, instead of nagging all winter.
 - **Count-based** tasks watch an entity you pick and count each `off → on` transition — e.g. "descale the coffee machine every 60 brews" counting a power switch. The panel shows progress as `current / threshold`. The counter can also be adjusted by [service call](#services).
 - **Runtime-based** tasks watch a numeric sensor and compare its growth against a threshold — e.g. "service the generator every 50 running hours" using a runtime counter sensor. If the source sensor is reset externally (its value drops below the recorded baseline), the baseline resets automatically so progress keeps making sense.
 
 ### Optional task fields
 
 - **Last performed** — defaults to today when omitted.
+- **Active months** — restricts a time-based task to a season (see [trigger types](#trigger-types)); empty means year-round.
 - **Icon** — any Material Design icon (default `mdi:calendar-check`).
 - **Labels** — Home Assistant labels applied to the task's entity.
 - **NFC tag** — scanning the tag marks the task complete (see [NFC tags](#nfc-tags)).
@@ -130,7 +138,30 @@ Each task can send its own push notifications — enable them in the **Notificat
 - **Time of day** — when the automatic notification is sent (default 09:00).
 - **Open URL** — optional link attached to the notification's **Open** action (e.g. the appliance manual).
 
-At most one notification per task and state is sent per day. Notifications sent to the Home Assistant mobile apps include **Mark complete** and **Snooze** action buttons — snoozing silences the task's notifications for a day (see [`home_maintenance.snooze_task`](#home_maintenancesnooze_task) for longer). The edit dialog has a **Send test notification** button that fires the task's notification immediately using its last saved settings.
+At most one notification per task and state is sent per day. Notifications sent to the Home Assistant mobile apps include **Mark complete** and **Snooze** action buttons — snoozing silences the task's notifications for a day (see [`home_maintenance.snooze_task`](#home_maintenancesnooze_task) for longer). Completing a task (by any means) dismisses its outstanding companion-app notification automatically. The edit dialog has a **Send test notification** button that fires the task's notification immediately using its last saved settings.
+
+### Search and label filtering
+
+The toolbar above the task table filters the list live:
+
+- The **search box** matches task titles and descriptions (case-insensitive).
+- **Label chips** appear for every Home Assistant label in use by a task. Click one or more to show tasks carrying *any* selected label (OR logic); click again to deselect, or use **Clear filters** to reset everything.
+
+While a filter is active, groups with no matching tasks are hidden.
+
+### Template library and CSV import/export
+
+- **Browse templates** opens a searchable library of 90+ pre-built maintenance tasks — HVAC, plumbing, electrical, appliances, interior, exterior, yard, safety, and vehicles — each with a sensible interval and icon. Picking one prefills the add-task form so you can adjust anything (including translating the text) before saving. Template titles and descriptions are currently English-only; category names follow your language.
+- **Import from CSV** (inside the template dialog) bulk-creates tasks from a `.csv` file. The header row must name a `title` column; `description`, `interval_value` (default 30), `interval_type` (`days`/`weeks`/`months`/`years`, default days), `last_performed` (`YYYY-MM-DD`, default today), `icon`, and `group_id` are optional. The dialog previews every importable row and reports per-line problems — a bad line is skipped, never the whole file. This is also the migration path from other maintenance trackers: export or transcribe their data into these columns and import.
+- **Export CSV** downloads all tasks as `home_maintenance_tasks.csv` with the same columns, so an export re-imports cleanly (count/runtime trigger details aren't part of the CSV format; exported count/runtime tasks re-import as time-based).
+
+Example CSV:
+
+```csv
+title,description,interval_value,interval_type,last_performed,icon,group_id
+Replace HVAC filter,MERV 13,90,days,2026-01-15,mdi:air-filter,HVAC
+Clean gutters,Front and back,6,months,,mdi:home-roof,Exterior
+```
 
 ### NFC tags
 
@@ -168,10 +199,17 @@ Each task is a `binary_sensor` (grouped under one *Home Maintenance* device) tha
 | --- | :-: | :-: | :-: | :-: |
 | `trigger_type`, `last_performed`, `description` | ✓ | ✓ | ✓ | ✓ |
 | `tag_id` (when an NFC tag is assigned) | ✓ | ✓ | ✓ | ✓ |
-| `interval_value`, `interval_type`, `next_due` | ✓ | ✓ | | |
+| `interval_value`, `interval_type`, `next_due`, `days_until_due` | ✓ | ✓ | | |
 | `anchor_date` | | ✓ | | |
+| `active_months` (when a season is set) | ✓ | | | |
 | `current_count`, `count_threshold`, `count_entity_id` | | | ✓ | |
 | `runtime_entity_id`, `runtime_threshold`, `runtime_baseline`, `runtime_current`, `runtime_delta` | | | | ✓ |
+
+`days_until_due` counts calendar days to the next due date — `0` means due today, negative values count overdue days — which keeps automation conditions simple (`{{ state_attr('binary_sensor.clean_gutters', 'days_until_due') <= 3 }}`).
+
+### Any task due sensor
+
+A single aggregate `binary_sensor.any_task_due` is **on** while *any* task is due, with `due_count`, `due_tasks` (the due tasks' titles), and `task_count` attributes — one automation hook for "does anything need attention" without templating over every task entity.
 
 ### Todo list
 
@@ -183,7 +221,7 @@ A single `calendar.home_maintenance` entity shows **all-day events for every tim
 
 ### Completion history
 
-Every completion — from the panel, a card, a service call, a tag scan, a notification action, or the todo list — is recorded in the task's history with the performed date, the actual completion time, and an optional note (the panel's complete dialog has a note field, and the services accept one). The last entries are shown in the edit dialog and the todo card's expanded view, history is included in the websocket task payloads for automations and templates, and each task keeps its most recent 50 entries.
+Every completion — from the panel, a card, a service call, a tag scan, a notification action, or the todo list — is recorded in the task's history with the performed date, the actual completion time, and an optional note (the panel's complete dialog has a note field, and the services accept one). The last entries are shown in the edit dialog and the todo card's expanded view, history is included in the websocket task payloads for automations and templates, and the edit dialog shows the full record in a scrollable list. Each task keeps its most recent 50 entries by default — raise, lower, or lift the cap with the **Completion-history entries kept per task** [option](#options) (`0` = unlimited).
 
 ## Services
 
@@ -236,6 +274,31 @@ Sends the task's notification immediately using its configured notify service, r
 
 ```yaml
 action: home_maintenance.send_task_notification
+data:
+  entity_id: binary_sensor.change_hvac_filter
+```
+
+### `home_maintenance.create_task`
+
+Creates a new maintenance task — so automations, scripts, and voice assistants can add tasks without the panel. `title` and `interval_value` are required; `interval_type` defaults to `days` and `last_performed` to today. All the other task fields (`trigger_type`, `anchor_date`, `active_months`, `description`, `icon`, `group_id`, `labels`, count/runtime fields, notification settings) are accepted too, with the same validation as the panel. With `response_variable`, the call returns the new task's id.
+
+```yaml
+action: home_maintenance.create_task
+data:
+  title: Replace HVAC filter
+  interval_value: 90
+  description: MERV 13
+  icon: mdi:air-filter
+  group_id: HVAC
+response_variable: new_task  # optional; new_task.task_id holds the id
+```
+
+### `home_maintenance.mark_overdue`
+
+Forces a task into the due state by backdating its trigger progress — useful for testing due-state automations and notification flows without waiting for a real due date. Time-based tasks get a last-performed date one interval before yesterday; fixed-date tasks return to their most recent past occurrence; count tasks jump to their threshold; runtime tasks re-baseline a full threshold below the sensor's current value. The call fails (rather than silently doing nothing) when the task cannot currently be due: a fixed-date task whose first occurrence is still in the future, a [seasonal](#trigger-types) task outside its active months, or a runtime task whose sensor is unavailable.
+
+```yaml
+action: home_maintenance.mark_overdue
 data:
   entity_id: binary_sensor.change_hvac_filter
 ```

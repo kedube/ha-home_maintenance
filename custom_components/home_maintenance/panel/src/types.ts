@@ -15,7 +15,8 @@ export const INTERVAL_TYPE_DAYS: Record<IntervalType, number> = {
 };
 
 // Mirror of the backend's MAX_STRING_LENGTH cap on free-text fields
-// (const.py); keeps inputs from accepting text the API would reject.
+// (const.py). Applied where the panel renders a plain input (the complete
+// dialog's note field); ha-selector text fields rely on the API's own cap.
 export const MAX_TEXT_LENGTH = 500;
 
 export function getIntervalTypeLabels(lang: string): Record<IntervalType, string> {
@@ -38,11 +39,6 @@ export interface Label {
     name: string;
     color?: string;
     icon?: string;
-}
-
-export interface Tag {
-    id: string;
-    name?: string;
 }
 
 export interface EntityRegistryEntry {
@@ -74,6 +70,9 @@ export interface Task {
     interval_type: IntervalType;
     last_performed: string;
     anchor_date?: string | null;
+    // Seasonal restriction for time-based tasks: months (1-12) the task is
+    // active in. Empty/absent means year-round.
+    active_months?: number[];
     tag_id?: string;
     icon?: string;
     trigger_type?: TriggerType;
@@ -110,6 +109,9 @@ export interface TaskFormData {
     interval_type: string;
     last_performed: string;
     anchor_date: string;
+    // Month numbers as strings — the HA select selector round-trips string
+    // values; the websocket payload converts back to numbers.
+    active_months: string[];
     icon: string;
     label: string[];
     tag: string;

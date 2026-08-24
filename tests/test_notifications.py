@@ -333,3 +333,43 @@ async def test_missing_notify_service_does_not_mark_sent(hass, setup_entry) -> N
 
     task = data.store.tasks["home_maintenance_notify_test"]
     assert task.last_notification_date is None
+
+
+async def test_completion_dismisses_mobile_notification(hass, setup_entry) -> None:
+    """Completing a task clears its outstanding mobile-app notification."""
+    calls = async_mock_service(hass, "notify", "mobile_app_test")
+    data: HomeMaintenanceData = hass.data[DOMAIN]
+
+    data.store.add(make_task(notification_target="notify.mobile_app_test"))
+    await hass.async_block_till_done()
+    assert len(calls) == 1  # the overdue notification
+
+    data.store.update_last_performed("home_maintenance_notify_test")
+    await hass.async_block_till_done()
+
+    assert len(calls) == 2
+    dismiss = calls[1]
+    assert dismiss.data["message"] == "clear_notification"
+    assert dismiss.data["data"]["tag"] == f"{DOMAIN}_home_maintenance_notify_test"
+    task = data.store.tasks["home_maintenance_notify_test"]
+    assert task.last_notification_kind is None
+    assert task.last_notification_date is None
+
+
+async def test_completion_does_not_dismiss_non_mobile_target(hass, setup_entry) -> None:
+    """Non-companion notify targets never receive a literal clear message."""
+    calls = async_mock_service(hass, "notify", "smtp_test")
+    data: HomeMaintenanceData = hass.data[DOMAIN]
+
+    data.store.add(make_task(notification_target="notify.smtp_test"))
+    await hass.async_block_till_done()
+    assert len(calls) == 1
+
+    data.store.update_last_performed("home_maintenance_notify_test")
+    await hass.async_block_till_done()
+
+    # No clear_notification call, but the recorded state is still cleared so
+    # the task re-notifies when it next becomes due.
+    assert len(calls) == 1
+    task = data.store.tasks["home_maintenance_notify_test"]
+    assert task.last_notification_date is None

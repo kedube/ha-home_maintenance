@@ -24,13 +24,20 @@ class HMTaskTable extends LitElement {
     @property({ attribute: false }) groups: string[] = [];
     @property({ attribute: false }) registry: EntityRegistryEntry[] = [];
     @property({ attribute: false }) labelRegistry: Label[] = [];
+    // While a search/label filter is active, groups with no matches are
+    // noise — the panel sets this to collapse them.
+    @property({ attribute: false }) hideEmptyGroups = false;
 
     // hass updates on every state change in Home Assistant, so render() runs
     // often. Cache columns and rows so ha-data-table receives stable
     // references unless the inputs actually changed.
     private _columnsCache?: { narrow: boolean; language: string; columns: Record<string, any> };
     private _rowsCache?: { tasks: Task[]; rows: any[] };
-    private _sectionsCache?: { tasks: Task[]; groups: string[]; sections: { title: string; rows: any[] }[] };
+    // unique_id -> resolved Label objects, rebuilt only when the registries
+    // change — the title column's extra template runs per row per render,
+    // and a linear registry.find there is O(rows × registry entries).
+    private _labelMapCache?: { registry: EntityRegistryEntry[]; labelRegistry: Label[]; map: Map<string, Label[]> };
+    private _sectionsCache?: { tasks: Task[]; groups: string[]; hideEmpty: boolean; sections: { title: string; rows: any[] }[] };
 
     private get _columns() {
         return {
@@ -60,12 +67,8 @@ class HMTaskTable extends LitElement {
                 filterable: true,
                 grows: true,
                 extraTemplate: (task: any) => {
-                    const entity = this.registry.find((entry) => entry.unique_id === task.id);
-                    if (!entity) return nothing;
-
-                    const labels = this.labelRegistry.filter((lr) => entity.labels.includes(lr.label_id));
-
-                    return labels.length
+                    const labels = this._taskLabels.get(task.id);
+                    return labels?.length
                         ? html`<ha-data-table-labels .labels=${labels}></ha-data-table-labels>`
                         : nothing;
                 },
@@ -186,6 +189,25 @@ class HMTaskTable extends LitElement {
         return columns;
     }
 
+    private get _taskLabels(): Map<string, Label[]> {
+        const cache = this._labelMapCache;
+        if (cache && cache.registry === this.registry && cache.labelRegistry === this.labelRegistry) {
+            return cache.map;
+        }
+        const byId = new Map(this.labelRegistry.map((label) => [label.label_id, label]));
+        const map = new Map<string, Label[]>();
+        this.registry.forEach((entry) => {
+            if (entry.labels.length) {
+                const resolved = entry.labels
+                    .map((id) => byId.get(id))
+                    .filter((label): label is Label => Boolean(label));
+                if (resolved.length) map.set(entry.unique_id, resolved);
+            }
+        });
+        this._labelMapCache = { registry: this.registry, labelRegistry: this.labelRegistry, map };
+        return map;
+    }
+
     private get _rows() {
         if (this._rowsCache?.tasks === this.tasks) {
             return this._rowsCache.rows;
@@ -215,7 +237,8 @@ class HMTaskTable extends LitElement {
     private get _sections() {
         if (
             this._sectionsCache?.tasks === this.tasks &&
-            this._sectionsCache?.groups === this.groups
+            this._sectionsCache?.groups === this.groups &&
+            this._sectionsCache?.hideEmpty === this.hideEmptyGroups
         ) {
             return this._sectionsCache.sections;
         }
@@ -231,13 +254,21 @@ class HMTaskTable extends LitElement {
 
         const named = [...buckets.keys()].filter((k) => k !== "").sort((a, b) => a.localeCompare(b));
         const ungrouped = buckets.get("")!;
-        const sections = [
+        let sections = [
             ...(ungrouped.length
                 ? [{ title: localize('common.ungrouped', this.hass!.language), rows: ungrouped }]
                 : []),
             ...named.map((group) => ({ title: group, rows: buckets.get(group)! })),
         ];
-        this._sectionsCache = { tasks: this.tasks, groups: this.groups, sections };
+        if (this.hideEmptyGroups) {
+            sections = sections.filter((section) => section.rows.length > 0);
+        }
+        this._sectionsCache = {
+            tasks: this.tasks,
+            groups: this.groups,
+            hideEmpty: this.hideEmptyGroups,
+            sections,
+        };
         return sections;
     }
 

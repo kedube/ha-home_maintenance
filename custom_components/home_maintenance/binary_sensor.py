@@ -10,13 +10,14 @@ from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.event import async_track_point_in_time
-from homeassistant.util import dt as dt_util
 
 from . import const
 from .store import task_event_data
 from .triggers import get_trigger
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import CALLBACK_TYPE, HomeAssistant
     from homeassistant.helpers.device_registry import DeviceInfo
@@ -36,7 +37,13 @@ async def async_setup_entry(
     store: TaskStore = entry.runtime_data.store
 
     async_add_entities(
-        HomeMaintenanceSensor(hass, store, task.id) for task in store.tasks.values()
+        [
+            *(
+                HomeMaintenanceSensor(hass, store, task.id)
+                for task in store.tasks.values()
+            ),
+            HomeMaintenanceAnyDueSensor(hass, store),
+        ]
     )
 
     @callback
@@ -145,7 +152,7 @@ class HomeMaintenanceSensor(BinarySensorEntity):
         self._schedule_due_refresh()
 
     def _schedule_due_refresh(self) -> None:
-        """Schedule a state refresh at the moment a time-based task comes due."""
+        """Schedule a refresh at the next moment the due state may flip."""
         if self._due_timer is not None:
             self._due_timer()
             self._due_timer = None
@@ -153,16 +160,20 @@ class HomeMaintenanceSensor(BinarySensorEntity):
         task = self.task
         if task is None:
             return
-        due = get_trigger(task.trigger_type).next_due(self.hass, task)
-        if due is None or due <= dt_util.now():
+        # next_transition covers the due moment and, for seasonal tasks, the
+        # season boundaries — a pending occurrence resurfacing at season
+        # start (or suspending at season end) fires no dispatcher signal.
+        when = get_trigger(task.trigger_type).next_transition(self.hass, task)
+        if when is None:
             return
 
         @callback
         def _refresh(_now: object) -> None:
             self._due_timer = None
             self._refresh_state()
+            self._schedule_due_refresh()
 
-        self._due_timer = async_track_point_in_time(self.hass, _refresh, due)
+        self._due_timer = async_track_point_in_time(self.hass, _refresh, when)
 
     async def async_added_to_hass(self) -> None:
         """Run when entity is added to Home Assistant."""
@@ -186,6 +197,103 @@ class HomeMaintenanceSensor(BinarySensorEntity):
             )
         )
         self._schedule_due_refresh()
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Cancel the scheduled due refresh."""
+        if self._due_timer is not None:
+            self._due_timer()
+            self._due_timer = None
+
+
+class HomeMaintenanceAnyDueSensor(BinarySensorEntity):
+    """
+    Aggregate sensor: on while any maintenance task is due.
+
+    One automation hook for "does anything need attention", without a
+    template sensor over every task entity. Refreshes on every task change
+    and additionally schedules a wall-clock refresh at the earliest upcoming
+    due moment, since a task turning due by time alone fires no signal.
+    """
+
+    _attr_should_poll = False
+    _attr_unique_id = f"{const.DOMAIN}_any_task_due"
+    _attr_icon = "mdi:clipboard-alert-outline"
+
+    def __init__(self, hass: HomeAssistant, store: TaskStore) -> None:
+        """Initialize the aggregate sensor."""
+        self.hass = hass
+        self._store = store
+        self._due_timer: CALLBACK_TYPE | None = None
+        self._timer_at: datetime | None = None
+        self._attr_name = "Any task due"
+        self._refresh_state()
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device information for this sensor."""
+        return const.device_info()
+
+    def _refresh_state(self) -> datetime | None:
+        """
+        Recompute state and attributes in one pass over the tasks.
+
+        Returns the earliest moment any task's due state may next flip (see
+        next_transition), collected in the same pass so a change signal does
+        not walk the task list twice.
+        """
+        due_tasks: list[str] = []
+        transitions: list[datetime] = []
+        for task in self._store.tasks.values():
+            trigger = get_trigger(task.trigger_type)
+            if trigger.is_due(self.hass, task):
+                due_tasks.append(task.title)
+            when = trigger.next_transition(self.hass, task)
+            if when is not None:
+                transitions.append(when)
+        self._attr_is_on = bool(due_tasks)
+        self._attr_extra_state_attributes = {
+            "due_count": len(due_tasks),
+            "due_tasks": sorted(due_tasks),
+            "task_count": len(self._store.tasks),
+        }
+        return min(transitions) if transitions else None
+
+    @callback
+    def _refresh(self) -> None:
+        next_transition = self._refresh_state()
+        self.async_write_ha_state()
+        self._schedule_due_refresh(next_transition)
+
+    def _schedule_due_refresh(self, when: datetime | None) -> None:
+        """(Re)arm the refresh timer, keeping an unchanged timer in place."""
+        # Count/runtime ticks fire SIGNAL_TASKS_CHANGED frequently while the
+        # earliest transition rarely moves — skip the cancel/re-register
+        # churn when the target is unchanged.
+        if when == self._timer_at and self._due_timer is not None:
+            return
+        if self._due_timer is not None:
+            self._due_timer()
+            self._due_timer = None
+        self._timer_at = when
+        if when is None:
+            return
+
+        @callback
+        def _fire(_now: object) -> None:
+            self._due_timer = None
+            self._timer_at = None
+            self._refresh()
+
+        self._due_timer = async_track_point_in_time(self.hass, _fire, when)
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to task changes and schedule the next due refresh."""
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass, const.SIGNAL_TASKS_CHANGED, self._refresh
+            )
+        )
+        self._schedule_due_refresh(self._refresh_state())
 
     async def async_will_remove_from_hass(self) -> None:
         """Cancel the scheduled due refresh."""

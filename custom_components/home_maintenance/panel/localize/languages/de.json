@@ -134,6 +134,10 @@
                     "notification_url": {
                         "heading": "URL öffnen",
                         "helper": "Optionale URL für die Aktion „Öffnen“ der Benachrichtigung"
+                    },
+                    "active_months": {
+                        "heading": "Aktive Monate",
+                        "helper": "Saisonale Aufgaben sind nur in diesen Monaten fällig (leer = ganzjährig)"
                     }
                 },
                 "sections": {
@@ -150,21 +154,22 @@
             },
             "current": {
                 "title": "Aktuelle Aufgaben",
-                "no_items": "Keine Aufgaben gefunden.",
-                "every": "alle",
-                "last": "Zuletzt",
                 "next": "Nächste Fälligkeit",
                 "actions": {
-                    "complete": "Abschließen",
                     "edit": "Bearbeiten",
                     "move": "In Gruppe verschieben",
                     "remove": "Entfernen"
                 },
-                "confirm_remove": "Sind Sie sicher, dass Sie diese Aufgabe entfernen möchten?",
                 "alerts": {
                     "complete_success": "\"{title}\" wurde als erledigt markiert. Das nächste Fälligkeitsdatum wurde neu berechnet.",
                     "complete_error": "Aufgabe konnte nicht als erledigt markiert werden. Details siehe Konsole.",
                     "remove_error": "Aufgabe konnte nicht entfernt werden. Details in der Konsole."
+                },
+                "filter": {
+                    "search": "Aufgaben durchsuchen...",
+                    "templates": "Vorlagen durchsuchen",
+                    "export": "CSV exportieren",
+                    "clear": "Filter zurücksetzen"
                 }
             },
             "groups": {
@@ -268,6 +273,10 @@
                     "notification_url": {
                         "heading": "URL öffnen",
                         "helper": "Optionale URL für die Aktion „Öffnen“ der Benachrichtigung"
+                    },
+                    "active_months": {
+                        "heading": "Aktive Monate",
+                        "helper": "Saisonale Aufgaben sind nur in diesen Monaten fällig (leer = ganzjährig)"
                     }
                 },
                 "sections": {
@@ -303,7 +312,6 @@
                 "message_progress": "\"{title}\" als erledigt markieren? Der Fortschritt ({interval}) beginnt von vorn.",
                 "note_label": "Notiz (optional)",
                 "actions": {
-                    "cancel": "Abbrechen",
                     "confirm": "Als erledigt markieren"
                 }
             },
@@ -313,7 +321,38 @@
                 "actions": {
                     "confirm": "Entfernen"
                 }
+            },
+            "templates": {
+                "title": "Aufgabenvorlagen",
+                "search": "Vorlagen durchsuchen...",
+                "import_csv": "Aus CSV importieren",
+                "choose_csv": "CSV-Datei auswählen",
+                "csv_hint": "Spalten: title (erforderlich), description, interval_value, interval_type, last_performed (JJJJ-MM-TT), icon, group_id",
+                "csv_empty": "Keine importierbaren Zeilen in der Datei gefunden.",
+                "no_matches": "Keine Vorlagen entsprechen deiner Suche.",
+                "import_count": "{count, plural, one {1 Aufgabe importieren} other {# Aufgaben importieren}}",
+                "imported": "{count, plural, one {1 Aufgabe importiert.} other {# Aufgaben importiert.}}",
+                "import_failed": "Import fehlgeschlagen: {titles}",
+                "preview": {
+                    "title": "Titel",
+                    "interval": "Intervall",
+                    "last_performed": "Zuletzt erledigt",
+                    "group": "Gruppe"
+                }
             }
+        }
+    },
+    "templates": {
+        "categories": {
+            "hvac": "Heizung & Klima",
+            "plumbing": "Sanitär",
+            "electrical": "Elektrik",
+            "appliances": "Haushaltsgeräte",
+            "interior": "Innenbereich",
+            "exterior": "Außenbereich",
+            "yard": "Garten",
+            "safety": "Sicherheit",
+            "vehicles": "Fahrzeuge"
         }
     }
 }
